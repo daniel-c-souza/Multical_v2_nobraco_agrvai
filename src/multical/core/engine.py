@@ -338,13 +338,39 @@ class MulticalEngine:
                         # If this is the last loop step, we end up accepting max tested.
                         best_k_idx_sel = k_chk + 1
             
-            best_k = best_k_idx_sel + 1
             print(f"Component {j+1} ({cname[j]}): Selected k={best_k}")
+            print(f" Detailed F-test stats for {cname[j]}:")
+            print(" k_base -> k_next | F_calc | F_crit | Significant? | Action")
+            header_printed = True
+            
+            # Re-run logic for printing (or store it)
+            # Since we didn't store details, we just print the stored arrays
+            # k_steps has [1, 2, 3...] corresponding to 1->2, 2->3...
+            current_best = 1
+            stop_triggered = False
+            
+            for i, k_base in enumerate(k_steps):
+                f_val = f_values[i]
+                f_crit = f_crits[i]
+                is_sig = f_val >= f_crit
+                
+                action = ""
+                if not stop_triggered:
+                    if is_sig:
+                        current_best = k_base + 1
+                        action = f"Accept k={current_best}"
+                    else:
+                        stop_triggered = True
+                        action = f"Stop. Keep k={current_best}"
+                else:
+                    action = "(Skipped by stop rule)"
+                    
+                print(f" {k_base:<6} -> {k_base+1:<6} | {f_val:.4f} | {f_crit:.4f} | {str(is_sig):<12} | {action}")
 
             # --- Plot F-Stats ---
             ax_f = axes_f[j]
-            ax_f.plot(k_steps, f_values, 'b-o', label='$F_{calc}$')
-            ax_f.plot(k_steps, f_crits, 'r--', label='$F_{crit} (95\%)$')
+            ax_f.plot(k_steps, f_values, 'b-o', label=r'$F_{calc}$')
+            ax_f.plot(k_steps, f_crits, 'r--', label=r'$F_{crit} (95\%)$')
             
             # Mark selected
             # If best_k < kmax, the stop happened at k = best_k. 

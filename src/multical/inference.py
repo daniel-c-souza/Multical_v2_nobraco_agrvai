@@ -140,6 +140,7 @@ def run_inference(Selecao, optkini, lini, kinf, nc, cname, unid, x0, absor0, xin
     print("Starting Inference per component...")
     for j in range(nc):
         k = kinf[j]
+        print(f"  - Component {j+1}: Using k={k} Latent Variables")
         # x_norm column j
         y_cal_j = x_norm[:, j].reshape(-1, 1)
         
@@ -214,7 +215,7 @@ def run_inference(Selecao, optkini, lini, kinf, nc, cname, unid, x0, absor0, xin
             max_val = max(np.max(y_ref), np.max(y_pred))
             plt.plot([min_val, max_val], [min_val, max_val], 'k--', label='1:1 Line')
             
-            plt.title(f"Prediction: {cname[j]} (RMSEP={rmsep:.4f})")
+            plt.title(f"Prediction: {cname[j]} (RMSEP={rmsep:.4f}, LVs={kinf[j]})")
             plt.xlabel(f"Reference ({unid})")
             plt.ylabel(f"Predicted ({unid})")
             plt.legend()

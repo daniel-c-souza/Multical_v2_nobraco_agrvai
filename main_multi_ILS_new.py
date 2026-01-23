@@ -50,6 +50,8 @@ def main():
      
     x_list = []
     absor_list = []
+    time_list_conc = [] # Store time from concentration file
+    time_list_spec = [] # Store time from spectra file
     wavelengths = None
     
     print("Loading data...")
@@ -60,13 +62,21 @@ def main():
                 xi = np.loadtxt(x_f)
                 absi = np.loadtxt(abs_f)
                 
-                # Ensure xi is column vector (N, nc)
-                if xi.ndim == 1:
-                    xi = xi.reshape(-1, 1)
+                # Check for Time column in Concentration File (assuming Col 0 is Time, Col 1 is Conc)
+                # If 2 columns, treat Col 0 as Time.
+                if xi.ndim == 2 and xi.shape[1] > 1:
+                    ti_conc = xi[:, 0]
+                    xi = xi[:, 1:] # Keep remaining columns as concentration
+                else:
+                    ti_conc = None
+                    # Ensure xi is column vector (N, nc)
+                    if xi.ndim == 1:
+                        xi = xi.reshape(-1, 1)
                 
-                # Absorbance file has wavelengths in first row
-                wl_curr = absi[0, :]
-                data_curr = absi[1:, :]
+                # Assuming new structure:
+                wl_curr = absi[0, 1:] # Skip first col (dummy time)
+                data_curr = absi[1:, 1:] # Skip first col (time)
+                ti_spec = absi[1:, 0] # First col is time
                 
                 if wavelengths is None:
                     wavelengths = wl_curr
@@ -77,6 +87,10 @@ def main():
                 
                 x_list.append(xi)
                 absor_list.append(data_curr)
+                if ti_conc is not None:
+                     time_list_conc.append(ti_conc)
+                time_list_spec.append(ti_spec)
+                
             except Exception as e:
                 print(f"Error loading {x_f}/{abs_f}: {e}")
         else:
@@ -85,8 +99,13 @@ def main():
     if x_list:
         x0 = np.vstack(x_list)
         absor_data = np.vstack(absor_list)
-        #Row 0 is wavelengths, Rows 1..N are data
+        # Combine: Row 0 is wavelengths
         absor0 = np.vstack([wavelengths, absor_data])
+        
+        # Consolidate time if needed
+        if time_list_conc:
+             times_conc = np.concatenate(time_list_conc)
+        
         print(f"Total samples loaded: {x0.shape[0]}")
     else:
         raise FileNotFoundError("No valid data files loaded. Please check data_files paths and ensure files exist.")
