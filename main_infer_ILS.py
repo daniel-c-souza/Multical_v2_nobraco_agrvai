@@ -22,6 +22,23 @@ def load_data_from_list(file_pairs):
                 wl_curr = absi[0, :]
                 data_curr = absi[1:, :]
                 
+                # Check for length mismatch between concentration and spectra
+                # Ensure xi is at least 2D (samples, analytes) or 1D (samples,)
+                # We need to reconcile 'xi' samples with 'data_curr' samples
+                
+                # Handle 1D array for xi (single analyte) -> convert to column vector if needed for stacking consistency
+                if xi.ndim == 1:
+                     xi = xi.reshape(-1, 1)
+                
+                n_conc = xi.shape[0]
+                n_spec = data_curr.shape[0]
+                
+                if n_conc != n_spec:
+                    print(f"Warning: Sample count mismatch in {x_f} ({n_conc}) vs {abs_f} ({n_spec}). Trimming to min.")
+                    min_len = min(n_conc, n_spec)
+                    xi = xi[:min_len, :]
+                    data_curr = data_curr[:min_len, :]
+                
                 if wavelengths is None:
                     wavelengths = wl_curr
                 else:
@@ -61,11 +78,11 @@ def main():
     # Model Complexity for Inference
     # Number of LVs for each analyte. Must match 'nc'.
     # Example: [k_analyte1, k_analyte2, k_analyte3]
-    kinf = [4, 4, 4] 
+    kinf = [5] 
     
     # Analytes
-    nc = 3
-    cname = ['clb', 'gl', 'xyl'] 
+    nc = 1
+    cname = ['cel'] 
     unid = 'g/L'
     
     # =========================================================================
@@ -75,7 +92,7 @@ def main():
     # --- Calibration Data ---
     # Files to build the model
     cal_files = [
-        ('x02.txt', 'abs02.txt'),
+        ('x_cel_jao_cal.txt', 'jao_espectros.txt'),
         #('x03.txt', 'abs03.txt'),
         # ('x04.txt', 'abs04.txt') 
     ]
@@ -83,7 +100,7 @@ def main():
     # --- Inference Data ---
     # Files to predict on
     inf_files = [
-        ('x04.txt', 'abs04.txt'), # Using x04 as inference for demo
+        ('conc_jao_infer.txt', 'abs_jao_infer.txt'),
         # ('x05.txt', 'abs05.txt')
     ]
     
@@ -105,9 +122,9 @@ def main():
     
     # Pretreatment for Calibration
     pretreat = [
-        ['Cut', 4500, 10000, 1],
-        ['SG', 3, 1, 5, 1, 1],
-        ['MA', 7, 1, 1],
+        ['Cut', 5500, 9000, 1],
+        ['SG',7,1,2,1,1],
+        ['AutoScale', 1]
     ]
     
     # Pretreatment for Inference (usually same as Cal)
