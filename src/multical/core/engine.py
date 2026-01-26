@@ -14,7 +14,7 @@ class MulticalEngine:
     def __init__(self):
         pass
         
-    def run(self, Selecao, optkini, lini, kmax, nc, cname, unid, x0, absor0, frac_test, dadosteste, OptimModel, pretreat_list, analysis_list=None, output_dir=None, outlier=0):
+    def run(self, Selecao, optkini, lini, kmax, nc, cname, unid, x0, absor0, frac_test, dadosteste, OptimModel, pretreat_list, analysis_list=None, output_dir=None, outlier=0, use_ftest=True):
         """
         Main execution engine.
         """
@@ -72,13 +72,13 @@ class MulticalEngine:
         
         RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc = self.run_cv(
             Selecao, x, absor, kmax, OptimModel, nc, cname, frac_test, 
-            output_dir=output_dir, outlier=outlier
+            output_dir=output_dir, outlier=outlier, use_ftest=use_ftest
         )
         
         return RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc
 
 
-    def run_cv(self, Selecao, x, absor, kmax, OptimModel, nc, cname, frac_test, output_dir=None, outlier=0):
+    def run_cv(self, Selecao, x, absor, kmax, OptimModel, nc, cname, frac_test, output_dir=None, outlier=0, use_ftest=True):
         """
         Runs Cross-Validation logic.
         """
@@ -232,15 +232,26 @@ class MulticalEngine:
         header_str = "k\t" + "\t".join(cname)
         
         if output_dir:
-            # Save RMSEcalconc
+            # Save RMSEcalconc (Original Units)
             data_cal = np.hstack([k_col, RMSEcal_conc])
             np.savetxt(os.path.join(output_dir, 'Erro_cal.txt'), data_cal, header=header_str, fmt='%g', delimiter='\t')
             
-            # Save RMSECVconc (Erro_cv.txt)
+            # Save RMSECVconc (Original Units)
             data_cv = np.hstack([k_col, RMSECV_conc])
             np.savetxt(os.path.join(output_dir, 'Erro_cv.txt'), data_cv, header=header_str, fmt='%g', delimiter='\t')
             
-            # Save minimos.txt
+            # Save RMSEcal (Normalized)
+            data_cal_norm = np.hstack([k_col, RMSEcal])
+            np.savetxt(os.path.join(output_dir, 'Erro_cal_norm.txt'), data_cal_norm, header=header_str, fmt='%g', delimiter='\t')
+            
+            # Save RMSECV (Normalized)
+            data_cv_norm = np.hstack([k_col, RMSECV])
+            np.savetxt(os.path.join(output_dir, 'Erro_cv_norm.txt'), data_cv_norm, header=header_str, fmt='%g', delimiter='\t')
+            
+            # Save minimos.txt (based on CONC, or normalized? Original code used conc. 
+            # If plots are normalized, maybe the user wants min of normalized? 
+            # Usually min index is the same. Let's keep original unless requested otherwise, 
+            # but I'll add minimos_norm just in case)
             min_rmse = np.min(RMSECV_conc, axis=0)
             min_idx = np.argmin(RMSECV_conc, axis=0) + 1 
             minimos = np.vstack([min_rmse, min_idx])
@@ -255,138 +266,150 @@ class MulticalEngine:
         
         for j in range(nc):
             ax = axes[j]
-            ax.plot(k_col, RMSECV_conc[:, j], 'b-o', label='RMSECV')
-            ax.plot(k_col, RMSEcal_conc[:, j], 'r-s', label='RMSEC')
+            ax.plot(k_col, RMSECV[:, j], 'b-', label='RMSECV (norm)')
+            ax.plot(k_col, RMSEcal[:, j], 'r-', label='RMSEC (norm)')
             
             # Highlight Minimum
-            best_k_idx = np.argmin(RMSECV_conc[:, j])
+            best_k_idx = np.argmin(RMSECV[:, j])
             best_k = best_k_idx + 1
-            min_r = RMSECV_conc[best_k_idx, j]
+            min_r = RMSECV[best_k_idx, j]
             ax.plot(best_k, min_r, 'g*', markersize=15, label=f'Global Min (k={best_k})')
             
             ax.set_xlabel('Latent Variables (k)')
-            ax.set_ylabel(f'RMSE ({cname[j] if cname else ""})')
-            ax.set_title(f'RMSE Calibration/CV - {cname[j]}')
+            ax.set_ylabel(f'RMSE (Normalized) - {cname[j] if cname else ""}')
+            ax.set_title(f'RMSE Calibration/CV (Normalized) - {cname[j]}')
             ax.legend()
             ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+            
+        if output_dir:
+            fig_rmse.savefig(os.path.join(output_dir, 'RMSE_Calibration_CV.png'), dpi=300)
             
             
         plt.tight_layout()
         plt.show(block=False)
 
         # 2. Osten F-test Statistic Plot
-        fig_fstat, axes_f = plt.subplots(1, nc, figsize=(6*nc, 5), squeeze=False)
-        axes_f = axes_f.flatten()
+        if use_ftest:
+            fig_fstat, axes_f = plt.subplots(1, nc, figsize=(6*nc, 5), squeeze=False)
+            axes_f = axes_f.flatten()
 
         # 3. Predicted vs Measured (Best K selection via Osten F-test)
         fig_pred, axes_pred = plt.subplots(1, nc, figsize=(6*nc, 5), squeeze=False)
         axes_pred = axes_pred.flatten()
         
-        print(f"\n--- Model Selection (Osten F-test - Dissertation Method) ---")
+        if use_ftest:
+            print(f"\n--- Model Selection (Osten F-test - Dissertation Method) ---")
 
         for j in range(nc):
             # --- Selection Logic & F-stats Calculation ---
-            f_values = []
-            f_crits = []
-            k_steps = [] # Records the 'k' being tested against 'k+1'
+            # Default k selection for plotting: Global Minimum of RMSECV
+            best_k_idx_rmse = np.argmin(RMSECV_conc[:, j])
+            best_k_idx_sel = best_k_idx_rmse 
             
-            best_k_idx_sel = 0 # Default k=1
-            found_stop = False
-            
-            # Loop for k vs k+1
-            for k_chk in range(kmax - 1):
-                k_val = k_chk + 1   # The base model k
-                k_next = k_val + 1  # The more complex model k+1
-                k_steps.append(k_val) 
+            if use_ftest:
+                f_values = []
+                f_crits = []
+                k_steps = [] # Records the 'k' being tested against 'k+1'
                 
-                # RMSE indices assume 0-based
-                rmse_sq_k = RMSECV_conc[k_chk, j]**2
-                rmse_sq_k_plus_1 = RMSECV_conc[k_chk + 1, j]**2
+                best_k_idx_ftest = 0
+                found_stop = False
                 
-                if rmse_sq_k_plus_1 == 0: eps = 1e-10
-                else: eps = 0
-                
-                # F_estat: ( (RMSE_k^2 - RMSE_{k+1}^2) / RMSE_{k+1}^2 ) * df2
-                if is_holdout and train_idx_holdout is not None:
-                     n_cal_eff = len(train_idx_holdout)
-                else:
-                     n_cal_eff = nd
-
-                df2 = n_cal_eff - k_val - 1
-                if df2 <= 0: df2 = 1 
-                
-                numerator = rmse_sq_k - rmse_sq_k_plus_1
-                if numerator < 0:
-                     F_stat = 0
-                else:
-                     F_stat = (numerator / (rmse_sq_k_plus_1 + eps)) * df2
-                
-                f_values.append(F_stat)
-                
-                # F_critical: F(0.95, df1=1, df2=n_cal - k - 1)
-                f_crit_val = f_dist.ppf(0.95, 1, df2)
-                f_crits.append(f_crit_val)
-                
-                if not found_stop:
-                    if F_stat < f_crit_val:
-                        # Improvement NOT significant.
-                        # Stop. Best model is k_val.
-                        best_k_idx_sel = k_chk
-                        found_stop = True
+                # Loop for k vs k+1
+                for k_chk in range(kmax - 1):
+                    k_val = k_chk + 1   # The base model k
+                    k_next = k_val + 1  # The more complex model k+1
+                    k_steps.append(k_val) 
+                    
+                    # RMSE indices assume 0-based
+                    rmse_sq_k = RMSECV_conc[k_chk, j]**2
+                    rmse_sq_k_plus_1 = RMSECV_conc[k_chk + 1, j]**2
+                    
+                    if rmse_sq_k_plus_1 == 0: eps = 1e-10
+                    else: eps = 0
+                    
+                    # F_estat: ( (RMSE_k^2 - RMSE_{k+1}^2) / RMSE_{k+1}^2 ) * df2
+                    if is_holdout and train_idx_holdout is not None:
+                        n_cal_eff = len(train_idx_holdout)
                     else:
-                        # Improvement significant. Move to next.
-                        # If this is the last loop step, we end up accepting max tested.
-                        best_k_idx_sel = k_chk + 1
+                        n_cal_eff = nd
+
+                    df2 = n_cal_eff - k_val - 1
+                    if df2 <= 0: df2 = 1 
+                    
+                    numerator = rmse_sq_k - rmse_sq_k_plus_1
+                    if numerator < 0:
+                        F_stat = 0
+                    else:
+                        F_stat = (numerator / (rmse_sq_k_plus_1 + eps)) * df2
+                    
+                    f_values.append(F_stat)
+                    
+                    # F_critical: F(0.95, df1=1, df2=n_cal - k - 1)
+                    f_crit_val = f_dist.ppf(0.95, 1, df2)
+                    f_crits.append(f_crit_val)
+                    
+                    if not found_stop:
+                        if F_stat < f_crit_val:
+                            # Improvement NOT significant.
+                            # Stop. Best model is k_val.
+                            best_k_idx_ftest = k_chk
+                            found_stop = True
+                        else:
+                            # Improvement significant. Move to next.
+                            # If this is the last loop step, we end up accepting max tested.
+                            best_k_idx_ftest = k_chk + 1
+                
+                best_k_selected_ftest = best_k_idx_ftest + 1
+                print(f"Component {j+1} ({cname[j]}): F-test suggested k={best_k_selected_ftest} (Global Min k={best_k_idx_rmse+1})")
+                print(f" Detailed F-test stats for {cname[j]}:")
+                print(" k_base -> k_next | F_calc | F_crit | Significant? | Action")
+                header_printed = True
+                
+                # Re-run logic for printing (or store it)
+                # Since we didn't store details, we just print the stored arrays
+                # k_steps has [1, 2, 3...] corresponding to 1->2, 2->3...
+                current_best = 1
+                stop_triggered = False
+                
+                for i, k_base in enumerate(k_steps):
+                    f_val = f_values[i]
+                    f_crit = f_crits[i]
+                    is_sig = f_val >= f_crit
+                    
+                    action = ""
+                    if not stop_triggered:
+                        if is_sig:
+                            current_best = k_base + 1
+                            action = f"Accept k={current_best}"
+                        else:
+                            stop_triggered = True
+                            action = f"Stop. Keep k={current_best}"
+                    else:
+                        action = "(Skipped by stop rule)"
+                        
+                    print(f" {k_base:<6} -> {k_base+1:<6} | {f_val:.4f} | {f_crit:.4f} | {str(is_sig):<12} | {action}")
+
+                # --- Plot F-Stats ---
+                ax_f = axes_f[j]
+                ax_f.plot(k_steps, f_values, 'b-o', label=r'$F_{calc}$')
+                ax_f.plot(k_steps, f_crits, 'r--', label=r'$F_{crit} (95\%)$')
+                
+                # Mark selected
+                # If best_k < kmax, the stop happened at k = best_k. 
+                # The test best_k vs best_k+1 failed.
+                # We can highlight the point corresponding to best_k index in the check list?
+                # Actually k_steps are [1, 2, ...]. 
+                # If Selected k=2, it means 1->2 was significant, 2->3 was NOT.
+                # So at x=1 (test 1 vs 2), F > Fcrit. At x=2 (test 2 vs 3), F < Fcrit.
+                
+                ax_f.set_xlabel('Latent Variables (k) vs (k+1)')
+                ax_f.set_ylabel('F Statistic')
+                ax_f.set_title(f'F-Test Selection - {cname[j]}')
+                ax_f.legend()
+                ax_f.xaxis.set_major_locator(MaxNLocator(integer=True))
+
             
             best_k_selected = best_k_idx_sel + 1
-            print(f"Component {j+1} ({cname[j]}): Selected k={best_k_selected}")
-            print(f" Detailed F-test stats for {cname[j]}:")
-            print(" k_base -> k_next | F_calc | F_crit | Significant? | Action")
-            header_printed = True
-            
-            # Re-run logic for printing (or store it)
-            # Since we didn't store details, we just print the stored arrays
-            # k_steps has [1, 2, 3...] corresponding to 1->2, 2->3...
-            current_best = 1
-            stop_triggered = False
-            
-            for i, k_base in enumerate(k_steps):
-                f_val = f_values[i]
-                f_crit = f_crits[i]
-                is_sig = f_val >= f_crit
-                
-                action = ""
-                if not stop_triggered:
-                    if is_sig:
-                        current_best = k_base + 1
-                        action = f"Accept k={current_best}"
-                    else:
-                        stop_triggered = True
-                        action = f"Stop. Keep k={current_best}"
-                else:
-                    action = "(Skipped by stop rule)"
-                    
-                print(f" {k_base:<6} -> {k_base+1:<6} | {f_val:.4f} | {f_crit:.4f} | {str(is_sig):<12} | {action}")
-
-            # --- Plot F-Stats ---
-            ax_f = axes_f[j]
-            ax_f.plot(k_steps, f_values, 'b-o', label=r'$F_{calc}$')
-            ax_f.plot(k_steps, f_crits, 'r--', label=r'$F_{crit} (95\%)$')
-            
-            # Mark selected
-            # If best_k < kmax, the stop happened at k = best_k. 
-            # The test best_k vs best_k+1 failed.
-            # We can highlight the point corresponding to best_k index in the check list?
-            # Actually k_steps are [1, 2, ...]. 
-            # If Selected k=2, it means 1->2 was significant, 2->3 was NOT.
-            # So at x=1 (test 1 vs 2), F > Fcrit. At x=2 (test 2 vs 3), F < Fcrit.
-            
-            ax_f.set_xlabel('Latent Variables (k) vs (k+1)')
-            ax_f.set_ylabel('F Statistic')
-            ax_f.set_title(f'F-Test Selection - {cname[j]}')
-            ax_f.legend()
-            ax_f.xaxis.set_major_locator(MaxNLocator(integer=True))
-            
 
             # --- Plot Predicted vs Measured (for Selected K) ---
             ax = axes_pred[j]
@@ -430,6 +453,9 @@ class MulticalEngine:
                  ax.set_ylabel(f'Predicted {cname[j]}')
                  ax.set_title(f'{cname[j]}: k={best_k_selected}, $R^2$={r2:.3f}, RMSE={rmsecv_best:.4g}')
                  ax.legend()
+        
+        if output_dir:
+            fig_pred.savefig(os.path.join(output_dir, 'Predicted_vs_Measured.png'), dpi=300)
                  
         
         plt.tight_layout()

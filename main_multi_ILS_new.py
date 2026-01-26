@@ -26,12 +26,12 @@ def main():
     analysis_list = [['LB'], ['PCA']]
     
     # Max Regressors
-    kmax =20
+    kmax =15
     
     # Num Analytes
     nc = 3
     
-    cname = ['cb','gl','xy'] # constituent names
+    cname = ['cb', 'gl', 'xy'] # constituent names
     unid = 'g/L' #  unit for constituents
     
     # =========================================================================
@@ -42,12 +42,17 @@ def main():
     # Each entry is (Concentration_File, Absorbance_File)
     
     # Example using specific files:
+    """
+    data_files = [
+
+        ('x_cel_jao_cal.txt', 'jao_espectros.txt'),
+    ]"""
+    
     data_files = [
         ('exp4_refe.txt', 'exp4_nonda.txt'),
         ('exp5_refe.txt', 'exp5_nonda.txt'),
         ('exp6_refe.txt', 'exp6_nonda.txt'),
-    ]
-     
+       ]
     x_list = []
     absor_list = []
     time_list_conc = [] # Store time from concentration file
@@ -135,7 +140,7 @@ def main():
     
     # Option 2: K-Fold Cross Validation
     # Set kpart = -1 for LOOCV, or integer > 1 for k-folds
-    kpart = 10
+    kpart = 5
     # CV Type: 'random', 'consecutive', or 'venetian'
     cv_type = 'venetian'
     OptimModel = ['kfold', kpart, cv_type] 
@@ -146,6 +151,9 @@ def main():
     # Outlier handling
     outlier = 0 # 0=No, 1=Yes (Calculates Student t-test on residuals)
 
+    # F-test for Model Selection (Osten)
+    use_ftest = False 
+ 
   
     
     # =========================================================================
@@ -163,7 +171,7 @@ def main():
     """      
 
     pretreat = [
-        ['Cut', 5500, 8500, 1],
+        ['Cut', 4500, 8500, 1],
         ['SG',7,1,2,1,1],
         
     ]
@@ -177,7 +185,7 @@ def main():
     RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc = engine.run(
         Selecao, optkini, lini, kmax, nc, cname, unid, x0, absor0, 
         frac_test, dadosteste, OptimModel, pretreat, 
-        analysis_list=analysis_list, output_dir=results_dir, outlier=outlier
+        analysis_list=analysis_list, output_dir=results_dir, outlier=outlier, use_ftest=use_ftest
     )
     
     model_map = {1: "PLS", 2: "SPA", 3: "PCR"}

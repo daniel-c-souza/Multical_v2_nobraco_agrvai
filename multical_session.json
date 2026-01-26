@@ -1,0 +1,9 @@
+{
+    "autosave": true,
+    "file_pairs": [],
+    "out_dir": "results_gui",
+    "method": 1,
+    "kmax": 20,
+    "nc": 3,
+    "cname": "cb, gl, xy"
+}
