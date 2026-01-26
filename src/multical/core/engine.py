@@ -338,7 +338,8 @@ class MulticalEngine:
                         # If this is the last loop step, we end up accepting max tested.
                         best_k_idx_sel = k_chk + 1
             
-            print(f"Component {j+1} ({cname[j]}): Selected k={best_k}")
+            best_k_selected = best_k_idx_sel + 1
+            print(f"Component {j+1} ({cname[j]}): Selected k={best_k_selected}")
             print(f" Detailed F-test stats for {cname[j]}:")
             print(" k_base -> k_next | F_calc | F_crit | Significant? | Action")
             header_printed = True
@@ -427,7 +428,7 @@ class MulticalEngine:
                  
                  ax.set_xlabel(f'Measured {cname[j]}')
                  ax.set_ylabel(f'Predicted {cname[j]}')
-                 ax.set_title(f'{cname[j]}: k={best_k}, $R^2$={r2:.3f}, RMSE={rmsecv_best:.4g}')
+                 ax.set_title(f'{cname[j]}: k={best_k_selected}, $R^2$={r2:.3f}, RMSE={rmsecv_best:.4g}')
                  ax.legend()
                  
         

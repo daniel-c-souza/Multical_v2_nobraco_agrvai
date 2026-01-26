@@ -29,9 +29,9 @@ def main():
     kmax =20
     
     # Num Analytes
-    nc = 1
+    nc = 3
     
-    cname = ['cel'] # constituent names
+    cname = ['cb','gl','xy'] # constituent names
     unid = 'g/L' #  unit for constituents
     
     # =========================================================================
@@ -43,9 +43,9 @@ def main():
     
     # Example using specific files:
     data_files = [
-        ('x_cel_jao_cal.txt', 'jao_espectros.txt'),
-        #('x03.txt', 'abs03.txt'),
-        #('x04.txt', 'abs04.txt')
+        ('exp4_refe.txt', 'exp4_nonda.txt'),
+        ('exp5_refe.txt', 'exp5_nonda.txt'),
+        ('exp6_refe.txt', 'exp6_nonda.txt'),
     ]
      
     x_list = []
@@ -60,7 +60,17 @@ def main():
             print(f"  - {x_f} / {abs_f}")
             try:
                 xi = np.loadtxt(x_f)
-                absi = np.loadtxt(abs_f)
+                
+                # Load absorbance file with header handling
+                # First line: Time \t WL1 \t WL2 ...
+                with open(abs_f, 'r') as f_node:
+                    header_parts = f_node.readline().strip().split()
+                
+                # Extract wavelengths (skip "Time")
+                wl_curr = np.array([float(x) for x in header_parts[1:]])
+                
+                # Load data (skip header row)
+                absi = np.loadtxt(abs_f, skiprows=1)
                 
                 # Check for Time column in Concentration File (assuming Col 0 is Time, Col 1 is Conc)
                 # If 2 columns, treat Col 0 as Time.
@@ -74,9 +84,9 @@ def main():
                         xi = xi.reshape(-1, 1)
                 
                 # Assuming new structure:
-                wl_curr = absi[0, 1:] # Skip first col (dummy time)
-                data_curr = absi[1:, 1:] # Skip first col (time)
-                ti_spec = absi[1:, 0] # First col is time
+                # wl_curr loaded above from header
+                data_curr = absi[:, 1:] # Skip first col (time) from data matrix
+                ti_spec = absi[:, 0] # First col is time from data matrix
                 
                 if wavelengths is None:
                     wavelengths = wl_curr
@@ -153,7 +163,7 @@ def main():
     """      
 
     pretreat = [
-        ['Cut', 5500, 9000, 1],
+        ['Cut', 5500, 8500, 1],
         ['SG',7,1,2,1,1],
         
     ]
