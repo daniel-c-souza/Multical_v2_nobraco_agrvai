@@ -257,6 +257,94 @@ class MulticalEngine:
             minimos = np.vstack([min_rmse, min_idx])
             np.savetxt(os.path.join(output_dir, 'minimos.txt'), minimos, fmt='%g', delimiter='\t')
         
+        # --- Pre-calculate Model Selection (Osten F-test) ---
+        best_k_ftest = {} # Dictionary to store best k for each component if f-test used
+        f_test_results = {} # Store results for plotting later
+
+        if use_ftest:
+            print(f"\n--- Model Selection (Osten F-test - Dissertation Method) ---")
+            for j in range(nc):
+                best_k_idx_rmse = np.argmin(RMSECV_conc[:, j])
+                
+                f_values = []
+                f_crits = []
+                k_steps = []
+                
+                # Loop for k vs k+1
+                for k_chk in range(kmax - 1):
+                    k_val = k_chk + 1
+                    k_steps.append(k_val) 
+                    
+                    rmse_sq_k = RMSECV_conc[k_chk, j]**2
+                    rmse_sq_k_plus_1 = RMSECV_conc[k_chk + 1, j]**2
+                    
+                    if rmse_sq_k_plus_1 == 0: eps = 1e-10
+                    else: eps = 0
+                    
+                    if is_holdout and train_idx_holdout is not None:
+                        n_cal_eff = len(train_idx_holdout)
+                    else:
+                        n_cal_eff = nd
+
+                    df2 = n_cal_eff - k_val - 1
+                    if df2 <= 0: df2 = 1 
+                    
+                    numerator = rmse_sq_k - rmse_sq_k_plus_1
+                    if numerator < 0:
+                        F_stat = 0
+                    else:
+                        F_stat = (numerator / (rmse_sq_k_plus_1 + eps)) * df2
+                    
+                    f_values.append(F_stat)
+                    f_crit_val = f_dist.ppf(0.95, 1, df2)
+                    f_crits.append(f_crit_val)
+
+                # Selection Calculation: Highest k that shows significant improvement
+                # Default to k=1 if no improvement found
+                best_k = 1 
+                reason = "Base Model (No significant improvement found)"
+                
+                # Check each step. If significant, update best_k to the target of the step.
+                for i_k, freq_k in enumerate(k_steps):
+                    # freq_k is the base k (e.g. 1). Target is freq_k + 1 (e.g. 2)
+                    if f_values[i_k] >= f_crits[i_k]:
+                         # Significant Improvement
+                         current_target_k = freq_k + 1
+                         if current_target_k > best_k:
+                             best_k = current_target_k
+                             reason = f"Significant Improvement at k={freq_k}->{current_target_k}"
+
+                best_k_ftest[j] = best_k
+                f_test_results[j] = {
+                    'f_values': f_values,
+                    'f_crits': f_crits,
+                    'k_steps': k_steps,
+                    'best_k': best_k,
+                    'reason': reason
+                }
+
+                print(f"Component {j+1} ({cname[j]}): F-test suggested k={best_k} (Global Min k={best_k_idx_rmse+1})")
+                print(f" Detailed F-test stats for {cname[j]}:")
+                print(" k_base -> k_next | F_calc | F_crit | Significant? | Action")
+                
+                for i, k_base in enumerate(k_steps):
+                    f_val = f_values[i]
+                    f_crit = f_crits[i]
+                    is_sig = f_val >= f_crit
+                    action = ""
+                    if is_sig:
+                        if (k_base + 1) == best_k:
+                             action = "SELECTED (Max Sig)"
+                        else:
+                             action = "Significant"
+                    else:
+                        action = "Not Significant"
+                        
+                    print(f" {k_base:<6} -> {k_base+1:<6} | {f_val:.4f} | {f_crit:.4f} | {str(is_sig):<12} | {action}")
+                
+
+
+
         # --- Plotting CV Results ---
         from matplotlib.ticker import MaxNLocator
 
@@ -269,11 +357,20 @@ class MulticalEngine:
             ax.plot(k_col, RMSECV[:, j], 'b-', label='RMSECV (norm)')
             ax.plot(k_col, RMSEcal[:, j], 'r-', label='RMSEC (norm)')
             
-            # Highlight Minimum
-            best_k_idx = np.argmin(RMSECV[:, j])
-            best_k = best_k_idx + 1
+            # Determine which k to highlight
+            if use_ftest and j in best_k_ftest:
+                best_k = best_k_ftest[j]
+                best_k_idx = best_k - 1
+                label_k = f'F-test Selected (k={best_k})'
+                marker_k = 'g*'
+            else:
+                best_k_idx = np.argmin(RMSECV[:, j])
+                best_k = best_k_idx + 1
+                label_k = f'Global Min (k={best_k})'
+                marker_k = 'k*' # Change to black star if not F-test, or keep green? User mentioned green star. Let's keep green for "Selected Model"
+            
             min_r = RMSECV[best_k_idx, j]
-            ax.plot(best_k, min_r, 'g*', markersize=15, label=f'Global Min (k={best_k})')
+            ax.plot(best_k, min_r, 'g*', markersize=15, label=label_k)
             
             ax.set_xlabel('Latent Variables (k)')
             ax.set_ylabel(f'RMSE (Normalized) - {cname[j] if cname else ""}')
@@ -296,120 +393,32 @@ class MulticalEngine:
         # 3. Predicted vs Measured (Best K selection via Osten F-test)
         fig_pred, axes_pred = plt.subplots(1, nc, figsize=(6*nc, 5), squeeze=False)
         axes_pred = axes_pred.flatten()
-        
-        if use_ftest:
-            print(f"\n--- Model Selection (Osten F-test - Dissertation Method) ---")
 
         for j in range(nc):
-            # --- Selection Logic & F-stats Calculation ---
-            # Default k selection for plotting: Global Minimum of RMSECV
-            best_k_idx_rmse = np.argmin(RMSECV_conc[:, j])
-            best_k_idx_sel = best_k_idx_rmse 
+            # Decide best K for prediction plot
+            if use_ftest and j in best_k_ftest:
+                best_k_idx_sel = best_k_ftest[j] - 1
+            else:
+                best_k_idx_sel = np.argmin(RMSECV_conc[:, j])
             
+            best_k_selected = best_k_idx_sel + 1
+
             if use_ftest:
-                f_values = []
-                f_crits = []
-                k_steps = [] # Records the 'k' being tested against 'k+1'
-                
-                best_k_idx_ftest = 0
-                found_stop = False
-                
-                # Loop for k vs k+1
-                for k_chk in range(kmax - 1):
-                    k_val = k_chk + 1   # The base model k
-                    k_next = k_val + 1  # The more complex model k+1
-                    k_steps.append(k_val) 
-                    
-                    # RMSE indices assume 0-based
-                    rmse_sq_k = RMSECV_conc[k_chk, j]**2
-                    rmse_sq_k_plus_1 = RMSECV_conc[k_chk + 1, j]**2
-                    
-                    if rmse_sq_k_plus_1 == 0: eps = 1e-10
-                    else: eps = 0
-                    
-                    # F_estat: ( (RMSE_k^2 - RMSE_{k+1}^2) / RMSE_{k+1}^2 ) * df2
-                    if is_holdout and train_idx_holdout is not None:
-                        n_cal_eff = len(train_idx_holdout)
-                    else:
-                        n_cal_eff = nd
-
-                    df2 = n_cal_eff - k_val - 1
-                    if df2 <= 0: df2 = 1 
-                    
-                    numerator = rmse_sq_k - rmse_sq_k_plus_1
-                    if numerator < 0:
-                        F_stat = 0
-                    else:
-                        F_stat = (numerator / (rmse_sq_k_plus_1 + eps)) * df2
-                    
-                    f_values.append(F_stat)
-                    
-                    # F_critical: F(0.95, df1=1, df2=n_cal - k - 1)
-                    f_crit_val = f_dist.ppf(0.95, 1, df2)
-                    f_crits.append(f_crit_val)
-                    
-                    if not found_stop:
-                        if F_stat < f_crit_val:
-                            # Improvement NOT significant.
-                            # Stop. Best model is k_val.
-                            best_k_idx_ftest = k_chk
-                            found_stop = True
-                        else:
-                            # Improvement significant. Move to next.
-                            # If this is the last loop step, we end up accepting max tested.
-                            best_k_idx_ftest = k_chk + 1
-                
-                best_k_selected_ftest = best_k_idx_ftest + 1
-                print(f"Component {j+1} ({cname[j]}): F-test suggested k={best_k_selected_ftest} (Global Min k={best_k_idx_rmse+1})")
-                print(f" Detailed F-test stats for {cname[j]}:")
-                print(" k_base -> k_next | F_calc | F_crit | Significant? | Action")
-                header_printed = True
-                
-                # Re-run logic for printing (or store it)
-                # Since we didn't store details, we just print the stored arrays
-                # k_steps has [1, 2, 3...] corresponding to 1->2, 2->3...
-                current_best = 1
-                stop_triggered = False
-                
-                for i, k_base in enumerate(k_steps):
-                    f_val = f_values[i]
-                    f_crit = f_crits[i]
-                    is_sig = f_val >= f_crit
-                    
-                    action = ""
-                    if not stop_triggered:
-                        if is_sig:
-                            current_best = k_base + 1
-                            action = f"Accept k={current_best}"
-                        else:
-                            stop_triggered = True
-                            action = f"Stop. Keep k={current_best}"
-                    else:
-                        action = "(Skipped by stop rule)"
-                        
-                    print(f" {k_base:<6} -> {k_base+1:<6} | {f_val:.4f} | {f_crit:.4f} | {str(is_sig):<12} | {action}")
-
                 # --- Plot F-Stats ---
+                stats = f_test_results[j]
+                k_steps = stats['k_steps']
+                f_values = stats['f_values']
+                f_crits = stats['f_crits']
+                
                 ax_f = axes_f[j]
                 ax_f.plot(k_steps, f_values, 'b-o', label=r'$F_{calc}$')
                 ax_f.plot(k_steps, f_crits, 'r--', label=r'$F_{crit} (95\%)$')
-                
-                # Mark selected
-                # If best_k < kmax, the stop happened at k = best_k. 
-                # The test best_k vs best_k+1 failed.
-                # We can highlight the point corresponding to best_k index in the check list?
-                # Actually k_steps are [1, 2, ...]. 
-                # If Selected k=2, it means 1->2 was significant, 2->3 was NOT.
-                # So at x=1 (test 1 vs 2), F > Fcrit. At x=2 (test 2 vs 3), F < Fcrit.
                 
                 ax_f.set_xlabel('Latent Variables (k) vs (k+1)')
                 ax_f.set_ylabel('F Statistic')
                 ax_f.set_title(f'F-Test Selection - {cname[j]}')
                 ax_f.legend()
                 ax_f.xaxis.set_major_locator(MaxNLocator(integer=True))
-
-            
-            best_k_selected = best_k_idx_sel + 1
 
             # --- Plot Predicted vs Measured (for Selected K) ---
             ax = axes_pred[j]

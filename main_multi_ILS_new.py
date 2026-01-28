@@ -44,14 +44,15 @@ def main():
     # Example using specific files:
     """
     data_files = [
+    ('x_cel_jao_cal.txt', 'jao_espectros.txt'),
 
-        ('x_cel_jao_cal.txt', 'jao_espectros.txt'),
+        
     ]"""
     
     data_files = [
         ('exp4_refe.txt', 'exp4_nonda.txt'),
         ('exp5_refe.txt', 'exp5_nonda.txt'),
-        ('exp6_refe.txt', 'exp6_nonda.txt'),
+        ('exp6_refe.txt', 'exp6_nonda.txt'),        
        ]
     x_list = []
     absor_list = []
@@ -152,7 +153,7 @@ def main():
     outlier = 0 # 0=No, 1=Yes (Calculates Student t-test on residuals)
 
     # F-test for Model Selection (Osten)
-    use_ftest = False 
+    use_ftest = True 
  
   
     
@@ -171,7 +172,7 @@ def main():
     """      
 
     pretreat = [
-        ['Cut', 4500, 8500, 1],
+        ['Cut', 4500, 8000, 1],
         ['SG',7,1,2,1,1],
         
     ]
