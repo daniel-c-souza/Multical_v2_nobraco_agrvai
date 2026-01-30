@@ -8,31 +8,82 @@ from src.multical.var_selection import run_pso, run_simulated_annealing, calcula
 
 def main():
     # =========================================================================
-    #                                   CONFIG
+    #                               CONFIGURATION
     # =========================================================================
     
+    # --- 1. General Settings ---
     results_dir = "results_var_selection"
     os.makedirs(results_dir, exist_ok=True)
     
-    Selecao = 1 # 1 = PLS (Required for this variable selection logic)
-    optkini = 2 
-    lini = 0 
-
-    analysis_list = [['LB'], ['PCA']]
-    kmax = 15
+    # --- 2. Model Parameters ---
+    Selecao = 1       # Model type: 1 = PLS (Required for this variable selection logic)
+    kmax = 15         # Max Latent Variables
+    
+    # Analytes
     nc = 3
     cname = ['cb', 'gl', 'xy'] 
+    colors = ['green', 'red', 'purple']
     unid = 'g/L' 
+
+    # Optimization Parameters (SPA/PCR specifics)
+    optkini = 2 
+    lini = 0 
     
-    # =========================================================================
-    #                                   DATA
-    # =========================================================================
+    # --- 3. Cross-Validation Settings ---
+    kpart = 5
+    cv_type = 'venetian' 
+    OptimModel = ['kfold', kpart, cv_type] 
     
+    frac_test = 0.0 
+    dadosteste = [] 
+
+    # --- 4. Variable Selection Settings ---
+    
+    # Method Selection: 'VIP' or 'SA' (Simulated Annealing) or 'PSO'
+    selection_method = 'VIP' 
+    
+    # VIP Parameters
+    vip_thresholds = np.arange(0.5, 1.6, 0.1) # Thresholds to scan
+    
+    # Simulated Annealing Parameters
+    sa_params = {
+        'max_iter': 3000,     # Maximum number of iterations
+        'initial_temp': 0.7, # Initial temperature (T0)
+        'alpha': 0.92        # Cooling rate (T = T * alpha)
+    }
+
+    # PSO Parameters
+    pso_params = {
+        'n_particles': 100,
+        'max_iter': 1000,
+        'w': 0.9,   # Inertia weight
+        'c1': 1.49, # Cognitive weight
+        'c2': 1.49  # Social weight
+    }
+
+    # --- 5. Statistical Analysis ---
+    outlier = 0 
+    use_ftest = True 
+    analysis_list = [['LB'], ['PCA']]
+
+    # --- 6. Pretreatment Pipeline ---
+    pretreat = [
+        ['Cut', 4500, 8000, 1],
+        ['SG', 7, 1, 2, 1, 1],
+    ]
+
+    # --- 7. Data Files ---
     data_files = [
         ('exp4_refe.txt', 'exp4_nonda.txt'),
         ('exp5_refe.txt', 'exp5_nonda.txt'),
-        ('exp6_refe.txt', 'exp6_nonda.txt'),        
-       ]
+        ('exp6_refe.txt', 'exp6_nonda.txt'),   
+        ('exp7_refe.txt', 'exp7_nonda.txt'),      
+    ]
+
+    # =========================================================================
+    #                       DATA LOADING
+    # =========================================================================
+
     x_list = []
     absor_list = []
     time_list_conc = []
@@ -84,57 +135,6 @@ def main():
         print(f"Total samples loaded: {x0.shape[0]}")
     else:
         raise FileNotFoundError("No valid data files loaded.")
-
-    # =========================================================================
-    #                                ANALYSIS CONFIG
-    # =========================================================================
-    
-    frac_test = 0.0 
-    dadosteste = [] 
-    
-    kpart = 5
-    cv_type = 'venetian' # Using same CV as main
-    OptimModel = ['kfold', kpart, cv_type] 
-    outlier = 0 
-    use_ftest = True 
-    
-    # Method Selection: 'VIP' or 'SA' (Simulated Annealing) or 'PSO'
-    selection_method = 'SA' # Change to 'SA' to use Simulated Annealing
-    
-    # --- Variable Selection Parameters ---
-    
-    # VIP Parameters
-    vip_thresholds = np.arange(0.5, 1.6, 0.1) # Thresholds to scan
-    
-    # Simulated Annealing Parameters
-    sa_params = {
-        'max_iter': 3000,     # Maximum number of iterations
-        'initial_temp': 0.7, # Initial temperature (T0)
-        'alpha': 0.92        # Cooling rate (T = T * alpha)
-    }
-
-    # PSO Parameters
-    # Tuning Guide:
-    # n_particles: 20-50. More = better search, but slower.
-    # max_iter: 50-500. More = better convergence.
-    # w: Inertia weight. 0.9 is standard start (will decay to 0.4). High = explore, Low = refine.
-    # c1 (Personal), c2 (Social): 1.49 is standard. c1>c2 = independent, c2>c1 = flollow leader.
-    pso_params = {
-        'n_particles': 100,
-        'max_iter': 1000,
-        'w': 0.9,   # Starting inertia (decays to 0.4)
-        'c1': 1.49, # Cognitive weight
-        'c2': 1.49  # Social weight
-    }
-    
-    # =========================================================================
-    #                                PRETREATMENT
-    # =========================================================================
-    
-    pretreat = [
-        ['Cut', 4500, 8000, 1],
-        ['SG',7,1,2,1,1],
-    ]
     
     # --- EXPLICIT PRETREATMENT STEP ---
     # We apply pretreatment NOW so we can use the clean data for variable selection
@@ -283,7 +283,7 @@ def main():
     RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc = engine.run(
         Selecao, optkini, lini, kmax, nc, cname, unid, x0, absor0_final, 
         frac_test, dadosteste, OptimModel, pretreat_list=[], 
-        analysis_list=analysis_list, output_dir=results_dir, outlier=outlier, use_ftest=use_ftest
+        analysis_list=analysis_list, output_dir=results_dir, outlier=outlier, use_ftest=use_ftest, colors=colors
     )
     
     if RMSECV is not None:

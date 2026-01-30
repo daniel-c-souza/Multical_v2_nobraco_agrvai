@@ -473,15 +473,15 @@ class MulticalEngine:
                 best_k = best_k_ftest[j]
                 best_k_idx = best_k - 1
                 label_k = f'F-test Selected (k={best_k})'
-                marker_k = 'g*'
+                marker_k = 'k*'
             else:
                 best_k_idx = np.argmin(RMSECV[:, j])
                 best_k = best_k_idx + 1
                 label_k = f'Global Min (k={best_k})'
-                marker_k = 'k*' # Change to black star if not F-test, or keep green? User mentioned green star. Let's keep green for "Selected Model"
+                marker_k = 'k*' 
             
             min_r = RMSECV[best_k_idx, j]
-            ax.plot(best_k, min_r, 'g*', markersize=15, label=label_k)
+            ax.plot(best_k, min_r, 'k*', markersize=15, label=label_k)
             
             ax.set_xlabel('Latent Variables (k)')
             ax.set_ylabel(f'RMSE (Normalized) - {cname[j] if cname else ""}')

@@ -192,50 +192,76 @@ def load_inference_data(file_pairs, nc=3):
 
 def main():
     # =========================================================================
-    #                                   CONFIG
+    #                               CONFIGURATION
     # =========================================================================
     
-    results_dir = "results_inference"
+   
+    plt.rcParams['figure.max_open_warning'] = 100
+
+    # --- 1. General Settings ---
+    results_dir = "results_inference" # Directory to save inference results
     os.makedirs(results_dir, exist_ok=True)
     
-    # Method
-    Selecao = 1 # 1 = PLS; 2 = SPA; 3=PCR
-    optkini = 2 # SPA Opt: 0=> lini = lambda(1); 1=> lini = given; 2=> optimize
-    lini = 0 
-
+    # --- 2. Model Parameters ---
+    Selecao = 1       # Model type: 1 = PLS; 2 = SPA; 3 = PCR
+    
     # Model Complexity for Inference
     # Number of LVs for each analyte. Must match 'nc'.
     # Example: [k_analyte1, k_analyte2, k_analyte3]
-    kinf = [4,5,5] 
+    kinf = [5, 5, 6] 
     
-    # Analytes
-    nc = 3
-    cname = ['cb', 'gl', 'xy'] 
-    colors =  ['green', 'red', 'purple'] 
-    unid = 'g/L'
+    # Optimization Parameters (SPA/PCR specifics)
+    optkini = 2       # 0=> lini = lambda(1); 1=> lini = given; 2=> optimize
+    lini = 0          # [nm] Initial wavelength (only if optkini=1)
+
+    # Analytes (Constituents)
+    nc = 3            # Number of analytes
+    cname = ['cb', 'gl', 'xy']     # Names of analytes
+    colors = ['green', 'red', 'purple'] # Colors for plotting
+    unid = 'g/L'      # Unit of measurement
     
-    # =========================================================================
-    #                                   DATA
-    # =========================================================================
+    # --- 3. Data Files ---
     
-    # --- Calibration Data ---
-    # Files to build the model
+    # Calibration Data: Files to build the model
+    # (Concentration_File, Absorbance_File)
     cal_files = [
         ('exp4_refe.txt', 'exp4_nonda.txt'),
         ('exp5_refe.txt', 'exp5_nonda.txt'),
         ('exp6_refe.txt', 'exp6_nonda.txt'),   
-        #('x03.txt', 'abs03.txt'),
-        # ('x04.txt', 'abs04.txt') 
+        ('exp7_refe.txt', 'exp7_nonda.txt'),
     ]
     
-    # --- Inference Data ---
-    # Files to predict on
+    # Inference Data: Files to predict on
+    # (Reference_File_Optional, Absorbance_File)
+    # If Reference File exists, it will be used for validation/alignment.
     inf_files = [
         ('exp4_refe.txt', 'exp_04_inf.txt'),
         ('exp5_refe.txt', 'exp_05_inf.txt'),
         ('exp6_refe.txt', 'exp_06_inf.txt'),  
-        # ('x05.txt', 'abs05.txt')
+        ('exp7_refe.txt', 'exp7_nonda.txt'),
     ]
+    
+    # --- 4. Pretreatment Pipeline ---
+    # Pretreatment for Calibration and Inference
+    # List of [Operation, Parameters...]
+    
+    pretreat = [
+        ['Cut', 4500, 8000 , 1],
+        ['SG', 7, 1, 2, 1, 1]
+    ]
+    
+    # Pretreatment for Inference (usually same as Cal)
+    pretreatinf = list(pretreat) 
+
+    # --- 5. Analysis & Diagnostics ---
+    analysis_list = []     # Analysis for Calibration Data (e.g. [['PCA']])
+    analysisinf_list = []  # Analysis for Inference Data (e.g. [['PCA']])
+    leverage = 0           # Calculate Leverage? (0=No)
+    
+
+    # =========================================================================
+    #                       DATA LOADING
+    # =========================================================================
     
     print("Loading Calibration Data...")
     x0, absor0, t0 = load_data_from_list(cal_files)
@@ -248,32 +274,6 @@ def main():
     if absorinf0 is None:
         print("Error: No inference data loaded.")
         return
-
-    # =========================================================================
-    #                                PRETREATMENT
-    # =========================================================================
-    
-    # Pretreatment for Calibration
-    pretreat = [
-        ['Cut', 4500, 8000 , 1],
-        ['SG',7,1,2,1,1]
-    ]
-    
-    # Pretreatment for Inference (usually same as Cal)
-    # But can be different if needed (e.g. slight baseline shift handling)
-    pretreatinf = list(pretreat) 
-    # Example adaptation:
-    # pretreatinf = [['Cut', 4500, 10000, 1], ['SG', 3, 1, 5, 1, 1]]
-
-    # =========================================================================
-    #                                ANALYSIS
-    # =========================================================================
-    
-    analysis_list = [['LB'], ['PCA']]
-    analysisinf_list = [] # [['PCA']]
-
-    # Leverage Analysis
-    leverage = 0 
 
     # =========================================================================
     #                                EXECUTION

@@ -3,60 +3,95 @@ import os
 import matplotlib.pyplot as plt
 from src.multical.core.engine import MulticalEngine
 from src.multical.analysis import func_analysis
-
+plt.rcParams['figure.max_open_warning'] = 100
 def main():
     # =========================================================================
-    #                                   CONFIG
+    #                               CONFIGURATION
     # =========================================================================
     
-    # Output Directory
-    # Directory to save text results and plots
-    results_dir = "results"
+    # --- 1. General Settings ---
+    results_dir = "results"  # Directory to save results and plots
     os.makedirs(results_dir, exist_ok=True)
     
-    # Method
-    Selecao = 1 # 1 = PLS; 2 = SPA; 3=PCR
-    optkini = 2 # 0=> lini = lambda(1); 1=> lini = dado abaixo; 2=> otimiza lini.
-    lini = 0 # [nm] só usar se optkini=1.
+    # --- 2. Model Parameters ---
+    Selecao = 1       # Model type: 1 = PLS; 2 = SPA; 3 = PCR
+    kmax = 15         # Maximum number of Latent Variables (Factors) for PLS/PCR
+    
+    # Analytes (Constituents)
+    nc = 3            # Number of analytes
+    cname = ['cb', 'gl', 'xy']  # Names of analytes (e.g. ['Glucose', 'Ethanol'])
+    colors = ['green', 'red', 'purple'] # Colors for each analyte validation plot
+    unid = 'g/L'      # Unit of measurement
 
-    # Analysis Configuration
-    # Define which analyses to run.
-    # Format: list of lists, e.g., [['LB'], ['PCA']]
-    # Options: 'LB' (Lambert-Beer plots), 'PCA' (Principal Component Analysis)
+    # Optimization Parameters (SPA/PCR specifics if needed)
+    optkini = 2       # 0=> lini = lambda(1); 1=> lini = below; 2=> optimize lini.
+    lini = 0          # [nm] Initial wavelength (only if optkini=1)
+
+    # --- 3. Cross-Validation & Validation Settings ---
+    # Test Set Split
+    frac_test = 0.0   # Fraction of data to separate for pure testing (hold-out)
+    dadosteste = []   # Manual test set (X_test, Y_test) if available, else []
+    
+    # Cross-Verification (CV) Settings
+    # Mode: 'kfold' or 'Val' (Holdout)
+    validation_mode = 'kfold' 
+    
+    # If 'kfold':
+    kpart = 5                 # Number of folds for CV (if 'kfold')
+    cv_type = 'venetian'      # Type of CV: 'random', 'consecutive', 'venetian'
+    
+    # If 'Val' (Holdout):
+    frac_val = 0.20           # Fraction for validation holdout (0.0 - 1.0)
+    
+    # Construct OptimModel based on above settings
+    if validation_mode == 'kfold':
+        OptimModel = ['kfold', kpart, cv_type]
+    elif validation_mode == 'Val':
+        OptimModel = ['Val', frac_val]
+    else:
+         OptimModel = ['kfold', 5, 'venetian'] # Default
+
+
+    # --- 4. Statistical Analysis & Outliers ---
+    outlier = 0       # 0 = No Outlier Removal, 1 = Yes (Student t-test on residuals)
+    use_ftest = True  # Use Osten F-test for automatic model selection (Optimal k)
+    
+    # Analyses to run before calibration
+    # Options: 'LB' (Lambert-Beer), 'PCA' (Principal Component Analysis)
     analysis_list = [['LB'], ['PCA']]
-    
-    # Max Regressors
-    kmax =15
-    
-    # Num Analytes
-    nc = 3
-    
-    cname = ['cb', 'gl', 'xy'] # constituent names
-    # Define colors for each analyte
-    # Use standard Matplotlib color names (e.g., 'blue', 'orange', 'green', '#RRGGBB')
-    colors = ['green', 'red', 'purple'] 
-    unid = 'g/L' #  unit for constituents
-    
-    # =========================================================================
-    #                                   DATA
-    # =========================================================================
-    
-    # Define file pairs to load. 
-    # Each entry is (Concentration_File, Absorbance_File)
-    
-    # Example using specific files:
-    """
-    data_files = [
-      ('x_cel_jao_cal.txt', 'jao_espectros.txt'),
 
-    ]"""
-    
+    # --- 5. Data Files ---
+    # List of tuples: (Concentration_File, Absorbance_File)
+    # Concentration File: Text file with Y values (Time, Conc) or (Conc)
+    # Absorbance File: Text file with Spectra (Time, WL1, WL2...)
     data_files = [
         ('exp4_refe.txt', 'exp4_nonda.txt'),
         ('exp5_refe.txt', 'exp5_nonda.txt'),
         ('exp6_refe.txt', 'exp6_nonda.txt'),   
-        #('exp7_refe.txt', 'exp7_nonda.txt'),
-       ]
+        ('exp7_refe.txt', 'exp7_nonda.txt'),
+    ]
+    # Note: Ensure these files exist in the working directory.
+
+    # --- 6. Pretreatment Pipeline ---
+    # List of [Operation, Parameters...]
+    # Available Operations:
+    #  ['Cut', min_wl, max_wl, plot_bool] : Cut spectral region
+    #  ['SG', window, order, deriv, plot_bool] : Savitzky-Golay Smoothing/Deriv
+    #  ['MA', window, order, plot_bool] : Moving Average
+    #  ['Loess', alpha, order, plot_bool] : LOESS Smoothing
+    #  ['Deriv', order, plot_bool] : Simple Derivative
+    #  ['MSC', plot_bool] : Multiplicative Scatter Correction (if implemented)
+    #  ['SNV', plot_bool] : Standard Normal Variate (if implemented)
+    
+    pretreat = [
+        ['Cut', 4500, 8000, 1],
+        ['SG', 7, 1, 2, 1, 1],
+    ]
+
+    # =========================================================================
+    #                       DATA LOADING
+    # =========================================================================
+
     x_list = []
     absor_list = []
     time_list_conc = [] # Store time from concentration file
@@ -129,57 +164,6 @@ def main():
     else:
         raise FileNotFoundError("No valid data files loaded. Please check data_files paths and ensure files exist.")
 
-    # =========================================================================
-    #                                ANALYSIS
-    # =========================================================================
-    
-
-    frac_test = 0.0 #random fraction for test set
-    dadosteste = [] # Empty list or tuple if no external test set
-    
-    # Optimization of model complexity parameters
-    # Option 1: Hold-out Validation with frac_val
-    frac_val = 0.20 #0.05-0.4
-    #OptimModel = ['Val', frac_val]
-    
-    # Option 2: K-Fold Cross Validation
-    # Set kpart = -1 for LOOCV, or integer > 1 for k-folds
-    kpart = 5
-    # CV Type: 'random', 'consecutive', or 'venetian'
-    cv_type = 'venetian'
-    OptimModel = ['kfold', kpart, cv_type] 
-    
-    # Option 3: Integer (Legacy support for k-fold)
-    # OptimModel = -1 # -1 = LOOCV
-    
-    # Outlier handling
-    outlier = 0 # 0=No, 1=Yes (Calculates Student t-test on residuals)
-
-    # F-test for Model Selection (Osten)
-    use_ftest = True 
- 
-  
-    
-    # =========================================================================
-    #                                PRETREATMENT
-    # =========================================================================
-    
-    """ Set of pretreatment 
-     Moving Average: ['MA',radius,Losing points = 1 or 2, plot=1 or 0]
-     LOESS: ['Loess',alpha = [0.2-0.9], order = [1,2,...],plot=1 or 0]
-     Savitzky and Golay Filter: ['SG',radius,Losing points = 1 or 2,poly order = integer, der order = integer, plot=1 or 0]   
-     Derivative: ['Deriv',order,plot=1 or 0]
-     Cutting regions: ['Cut',lower bound,upper bound,plot=1 or 0]
-     Cutting maxAbs: ['CutAbs',maxAbs, action: warning = 0 or cutting = 1 ,plot=1 or 0]
-     Control Baseline based on noninformation region: ['BLCtr',ini_lamb,final_lamb,Abs_value, plot=1 or 0]
-    """      
-
-    pretreat = [
-        ['Cut', 4500, 8000, 1],
-        ['SG',7,1,2,1,1],
-        
-    ]
-    
     
     # =========================================================================
     #                                EXECUTION
