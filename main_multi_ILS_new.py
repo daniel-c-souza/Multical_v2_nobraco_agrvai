@@ -29,7 +29,7 @@ def main():
     kmax =15
     
     # Num Analytes
-    nc = 3
+    nc = 1
     
     cname = ['cb', 'gl', 'xy'] # constituent names
     unid = 'g/L' #  unit for constituents
@@ -44,15 +44,17 @@ def main():
     # Example using specific files:
     """
     data_files = [
-    ('x_cel_jao_cal.txt', 'jao_espectros.txt'),
+            ('exp4_refe.txt', 'exp4_nonda.txt'),
+        ('exp5_refe.txt', 'exp5_nonda.txt'),
+        ('exp6_refe.txt', 'exp6_nonda.txt'),   
 
+    
         
     ]"""
     
     data_files = [
-        ('exp4_refe.txt', 'exp4_nonda.txt'),
-        ('exp5_refe.txt', 'exp5_nonda.txt'),
-        ('exp6_refe.txt', 'exp6_nonda.txt'),        
+        
+        ('x_cel_jao_cal.txt', 'jao_espectros.txt'),
        ]
     x_list = []
     absor_list = []
