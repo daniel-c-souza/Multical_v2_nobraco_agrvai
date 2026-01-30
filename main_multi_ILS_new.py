@@ -29,9 +29,12 @@ def main():
     kmax =15
     
     # Num Analytes
-    nc = 1
+    nc = 3
     
     cname = ['cb', 'gl', 'xy'] # constituent names
+    # Define colors for each analyte
+    # Use standard Matplotlib color names (e.g., 'blue', 'orange', 'green', '#RRGGBB')
+    colors = ['green', 'red', 'purple'] 
     unid = 'g/L' #  unit for constituents
     
     # =========================================================================
@@ -44,17 +47,15 @@ def main():
     # Example using specific files:
     """
     data_files = [
-            ('exp4_refe.txt', 'exp4_nonda.txt'),
-        ('exp5_refe.txt', 'exp5_nonda.txt'),
-        ('exp6_refe.txt', 'exp6_nonda.txt'),   
+      ('x_cel_jao_cal.txt', 'jao_espectros.txt'),
 
-    
-        
     ]"""
     
     data_files = [
-        
-        ('x_cel_jao_cal.txt', 'jao_espectros.txt'),
+        ('exp4_refe.txt', 'exp4_nonda.txt'),
+        ('exp5_refe.txt', 'exp5_nonda.txt'),
+        ('exp6_refe.txt', 'exp6_nonda.txt'),   
+        #('exp7_refe.txt', 'exp7_nonda.txt'),
        ]
     x_list = []
     absor_list = []
@@ -188,7 +189,8 @@ def main():
     RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc = engine.run(
         Selecao, optkini, lini, kmax, nc, cname, unid, x0, absor0, 
         frac_test, dadosteste, OptimModel, pretreat, 
-        analysis_list=analysis_list, output_dir=results_dir, outlier=outlier, use_ftest=use_ftest
+        analysis_list=analysis_list, output_dir=results_dir, outlier=outlier, use_ftest=use_ftest,
+        colors=colors
     )
     
     model_map = {1: "PLS", 2: "SPA", 3: "PCR"}

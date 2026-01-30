@@ -8,9 +8,7 @@ def sgolay_filt(x, y, n, F, d=0):
         x: Independent variable (vector) - Wavelengths
         y: Dependent variable (vector) - Absorbance (Warning: Scilab code treats y as column vector)
            If y is a matrix, this function should iterate? 
-           The original Scilab code 'sgolay_filt' takes 'y' as vector.
-           The 'func_pretreatment' calls it in a loop: 
-           'for i=1:nd absortemp(i,:)=sgolay_filt(lambda',absor(i,:)',ordem,janela,der_ordem)';'
+
     
     This function processes a single signal y (1D equivalent).
     
@@ -24,6 +22,12 @@ def sgolay_filt(x, y, n, F, d=0):
     
     # Check linearity
     dx = x[1:] - x[:-1]
+    
+    # Check if x has enough points
+    if len(dx) == 0:
+        # If x has 0 or 1 point, cannot determine linearity or run SG
+        return y # Return original if cannot filter
+    
     # Check if all dx are close
     if not np.allclose(dx, dx[0]):
         print("x must be linearly spaced")

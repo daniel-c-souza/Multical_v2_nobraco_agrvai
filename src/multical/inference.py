@@ -8,11 +8,13 @@ from .models.spa import spa_model, spa_clean
 from .models.pcr import pcr_model
 from .utils import zscore_matlab_style
 
-def run_inference(Selecao, optkini, lini, kinf, nc, cname, unid, x0, absor0, xinf0, absorinf0, pretreat_list, pretreatinf_list, analysis_list=None, analysisinf_list=None, leverage=0, output_dir=None, kmax_spa=20):
+def run_inference(Selecao, optkini, lini, kinf, nc, cname, unid, x0, absor0, xinf0, absorinf0, pretreat_list, pretreatinf_list, analysis_list=None, analysisinf_list=None, leverage=0, output_dir=None, kmax_spa=20, colors=None):
     """
     Inference Engine.
     Scales to units of x0.
     """
+    if colors is None:
+        colors = ['blue'] * nc
     
     # 1. Prepare Data
     lambda0 = absor0[0, :]
@@ -133,6 +135,7 @@ def run_inference(Selecao, optkini, lini, kinf, nc, cname, unid, x0, absor0, xin
     # 6. Inference Loop
     Xinf_pred = np.zeros((ndinf, nc))
     Xcal_pred = np.zeros((nd, nc)) # To return calibration fit as well? Scilab does not seem to output it clearly but calculates it.
+    RMSECV_vec = np.zeros(nc)
     
     # Helper models
     pls_obj = PLS()
@@ -144,6 +147,37 @@ def run_inference(Selecao, optkini, lini, kinf, nc, cname, unid, x0, absor0, xin
         # x_norm column j
         y_cal_j = x_norm[:, j].reshape(-1, 1)
         
+        # Calculate RMSECV (Leave-One-Out)
+        # This provides a realistic error estimate for the model
+        print(f"    Running LOO-CV for Component {j+1}...")
+        press = 0.0
+        for i_cv in range(nd):
+            # Create boolean mask for all but one
+            mask = np.ones(nd, dtype=bool)
+            mask[i_cv] = False
+            
+            X_tr = absor[mask, :]
+            y_tr = y_cal_j[mask]
+            X_val = absor[i_cv, :].reshape(1, -1)
+            
+            yp_val_i = None
+            if Selecao == 1: # PLS
+                 _, yp_val_i, _ = pls_obj.predict_model(X_tr, y_tr, k, Xt=X_val, teste_switch=1)
+            elif Selecao == 2: # SPA
+                 # Assuming cini is still valid/robust enough or we use the global cini
+                 _, yp_val_i, _ = spa_model(X_tr, y_tr, k, cini, X_val)
+            elif Selecao == 3: # PCR
+                 _, yp_val_i, _ = pcr_model(X_tr, y_tr, k, X_val)
+            
+            if yp_val_i is not None:
+                err = y_cal_j[i_cv].item() - yp_val_i.item()
+                press += err**2
+        
+        rmsecv_norm = np.sqrt(press / nd)
+        # Convert to real units
+        RMSECV_vec[j] = rmsecv_norm * xmax[j]
+        print(f"    RMSECV (CV): {RMSECV_vec[j]:.4f}")
+
         # Select Model
         # Scilab: [Xp(:,j), Xinf(:,j), Par_norm] = model(...)
         # Xp is calibration prediction, Xinf is inference prediction.
@@ -205,15 +239,33 @@ def run_inference(Selecao, optkini, lini, kinf, nc, cname, unid, x0, absor0, xin
             y_ref = xinf[:, j]
             y_pred = Xinf_conc[:, j]
             
-            # Simple metrics
-            rmsep = np.sqrt(np.mean((y_ref - y_pred)**2))
+            # Filter NaN from calculation of limits and metrics
+            valid_mask = ~np.isnan(y_ref) & ~np.isnan(y_pred)
             
-            plt.plot(y_ref, y_pred, 'o', label='Samples')
-            
-            # 1:1 line
-            min_val = min(np.min(y_ref), np.min(y_pred))
-            max_val = max(np.max(y_ref), np.max(y_pred))
-            plt.plot([min_val, max_val], [min_val, max_val], 'k--', label='1:1 Line')
+            if np.any(valid_mask):
+                y_ref_valid = y_ref[valid_mask]
+                y_pred_valid = y_pred[valid_mask]
+                
+                # Simple metrics
+                rmsep = np.sqrt(np.mean((y_ref_valid - y_pred_valid)**2))
+                
+                c_curr = colors[j] if j < len(colors) else 'blue'
+                plt.plot(y_ref, y_pred, 'o', label='Samples', color=c_curr)
+                
+                # 1:1 line
+                min_val = min(np.min(y_ref_valid), np.min(y_pred_valid))
+                max_val = max(np.max(y_ref_valid), np.max(y_pred_valid))
+                
+                # Expand limits slightly for better visualization
+                range_val = max_val - min_val
+                if range_val == 0: range_val = 1
+                min_val -= range_val * 0.05
+                max_val += range_val * 0.05
+                
+                plt.plot([min_val, max_val], [min_val, max_val], 'k--', label='1:1 Line')
+            else:
+                 rmsep = 0.0
+                 plt.plot([], [], 'o', label='No Valid Ref Samples')
             
             plt.title(f"Prediction: {cname[j]} (RMSEP={rmsep:.4f}, LVs={kinf[j]})")
             plt.xlabel(f"Reference ({unid})")
@@ -225,4 +277,4 @@ def run_inference(Selecao, optkini, lini, kinf, nc, cname, unid, x0, absor0, xin
             if output_dir:
                  fig.savefig(os.path.join(output_dir, f"Pred_vs_Ref_{cname[j]}.png"))
 
-    return Xinf_conc
+    return Xinf_conc, RMSECV_vec

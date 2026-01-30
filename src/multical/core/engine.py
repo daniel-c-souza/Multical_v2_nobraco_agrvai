@@ -15,10 +15,13 @@ class MulticalEngine:
     def __init__(self):
         pass
         
-    def run(self, Selecao, optkini, lini, kmax, nc, cname, unid, x0, absor0, frac_test, dadosteste, OptimModel, pretreat_list, analysis_list=None, output_dir=None, outlier=0, use_ftest=True):
+    def run(self, Selecao, optkini, lini, kmax, nc, cname, unid, x0, absor0, frac_test, dadosteste, OptimModel, pretreat_list, analysis_list=None, output_dir=None, outlier=0, use_ftest=True, colors=None):
         """
         Main execution engine.
         """
+        if colors is None:
+             # Default loop of colors if not provided
+             colors = ['blue'] * nc
         x0 = np.array(x0)
         absor0 = np.array(absor0)
         
@@ -73,16 +76,19 @@ class MulticalEngine:
         
         RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc = self.run_cv(
             Selecao, x, absor, kmax, OptimModel, nc, cname, frac_test, 
-            output_dir=output_dir, outlier=outlier, use_ftest=use_ftest
+            output_dir=output_dir, outlier=outlier, use_ftest=use_ftest, colors=colors
         )
         
         return RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc
 
 
-    def run_cv(self, Selecao, x, absor, kmax, OptimModel, nc, cname, frac_test, output_dir=None, outlier=0, use_ftest=True):
+    def run_cv(self, Selecao, x, absor, kmax, OptimModel, nc, cname, frac_test, output_dir=None, outlier=0, use_ftest=True, colors=None):
         """
         Runs Cross-Validation logic.
         """
+        if colors is None:
+             colors = ['blue'] * nc # Fallback
+        
         cname = [c.strip() for c in cname]
         
         nd, nl = absor.shape
@@ -456,8 +462,11 @@ class MulticalEngine:
         
         for j in range(nc):
             ax = axes[j]
-            ax.plot(k_col, RMSECV[:, j], 'b-', label='RMSECV (norm)')
-            ax.plot(k_col, RMSEcal[:, j], 'r-', label='RMSEC (norm)')
+            c_curr = colors[j] if j < len(colors) else 'blue'
+            
+            # Use analyte color for RMSECV, black/gray for RMSEC to avoid clash
+            ax.plot(k_col, RMSECV[:, j], color=c_curr, linestyle='-', label='RMSECV (norm)')
+            ax.plot(k_col, RMSEcal[:, j], color=c_curr, linestyle='--', label='RMSEC (norm)')
             
             # Determine which k to highlight
             if use_ftest and j in best_k_ftest:
@@ -513,8 +522,9 @@ class MulticalEngine:
                 f_crits = stats['f_crits']
                 
                 ax_f = axes_f[j]
-                ax_f.plot(k_steps, f_values, 'b-o', label=r'$F_{calc}$')
-                ax_f.plot(k_steps, f_crits, 'r--', label=r'$F_{crit} (95\%)$')
+                c_curr = colors[j] if j < len(colors) else 'blue'
+                ax_f.plot(k_steps, f_values, color=c_curr, marker='o', linestyle='-', label=r'$F_{calc}$')
+                ax_f.plot(k_steps, f_crits, 'k--', label=r'$F_{crit} (95\%)$')
                 
                 ax_f.set_xlabel('Latent Variables (k) vs (k+1)')
                 ax_f.set_ylabel('F Statistic')
@@ -548,7 +558,8 @@ class MulticalEngine:
                  y_plot = y_pred_col[indices_to_plot]
                  
                  # Plot Scatter
-                 ax.scatter(x_plot, y_plot, alpha=0.7, label=label_pt)
+                 point_color = colors[j] if j < len(colors) else 'blue'
+                 ax.scatter(x_plot, y_plot, alpha=0.7, label=label_pt, color=point_color)
                  
                  # Ideal Line (1:1)
                  min_val = min(x_plot.min(), y_plot.min())
