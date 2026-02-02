@@ -25,7 +25,7 @@ def apply_pretreatment(pretreat_list, absor, lambda_, plot=True, output_dir=None
         plt.title(f"{prefix}Original Data")
         plt.xlabel("Wavelength")
         plt.ylabel("Absorbance")
-        plt.show(block=False)
+        # plt.show(block=False)
         if output_dir:
             fig.savefig(os.path.join(output_dir, f'{prefix}Pretreatment_0_Original.png'))
         
@@ -152,7 +152,7 @@ def apply_pretreatment(pretreat_list, absor, lambda_, plot=True, output_dir=None
             plt.title(f"{prefix}Step {i+1}: {method}")
             plt.xlabel("Wavelength")
             plt.ylabel("Absorbance")
-            plt.show(block=False)
+            # plt.show(block=False)
             if output_dir:
                 fig.savefig(os.path.join(output_dir, f'{prefix}Pretreatment_{i+1}_{method}.png'))
 
