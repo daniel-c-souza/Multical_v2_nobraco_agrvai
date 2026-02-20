@@ -84,7 +84,7 @@ def main():
     #  ['SNV', plot_bool] : Standard Normal Variate (if implemented)
     
     pretreat = [
-        ['Cut', 4500, 8000, 1],
+        ['Cut', 4400, 7500, 1],
         ['SG', 7, 1, 2, 1, 1],
     ]
 
