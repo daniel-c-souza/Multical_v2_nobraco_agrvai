@@ -7,6 +7,8 @@ from src.multical.models.pls import PLS
 from src.multical.utils import zscore_matlab_style
 from src.multical.models.pcr import pcr_model
 from src.multical.models.spa import spa_model, spa_clean
+from src.multical.analysis import func_analysis
+from src.multical.preprocessing.pipeline import apply_pretreatment
 
 # Extended Engine
 class ExtendedMulticalEngine(MulticalEngine):
@@ -15,6 +17,72 @@ class ExtendedMulticalEngine(MulticalEngine):
         self.Ypred_cv_store = None
         self.X_measured_store = None
         self.best_k_ftest_store = None
+        self.Beta_store = None
+        self.wavelengths_store = None
+
+    def run(self, Selecao, optkini, lini, kmax, nc, cname, unid, x0, absor0, frac_test, dadosteste, OptimModel, pretreat_list, analysis_list=None, output_dir=None, outlier=0, use_ftest=True, colors=None, times=None):
+        """
+        Extended execution engine with times argument for analysis.
+        """
+        if colors is None:
+             colors = ['blue'] * nc
+        x0 = np.array(x0)
+        absor0 = np.array(absor0)
+        
+        lambda0 = absor0[0, :]
+        absor = absor0[1:, :]
+        x = x0
+        
+        # Pretreatment
+        print("Applying Pretreatment...")
+        # Note: output_dir passed to pretreatment if needed for logging
+        absor, lambda_ = apply_pretreatment(pretreat_list, absor, lambda0, output_dir=output_dir)
+        self.wavelengths_store = lambda_
+        
+        # Analysis
+        if analysis_list:
+             print("\n--- Running Data Analysis (Post-Pretreatment) ---")
+             # PASS times HERE
+             func_analysis(analysis_list, absor, lambda_, x, block=False, output_dir=output_dir, times=times)
+             print("-----------------------------\n")
+        
+        # Test Data Handling (dadosteste)
+        xtest_final = None
+        absortest_final = None
+        
+        if dadosteste:
+            xtest_in = dadosteste[0]
+            absortest_in = dadosteste[1]
+            if xtest_in is not None and len(xtest_in) > 0:
+                lambdatest0 = absortest_in[0, :]
+                absortest0 = absortest_in[1:, :]
+                
+                absortest_final, lambdatest_final = apply_pretreatment(pretreat_list, absortest0, lambdatest0)
+                xtest_final = xtest_in
+
+        # Consistency Check
+        ndx, nlx = x.shape
+        nd, nl = absor.shape
+        
+        if nd != ndx:
+            print(f"Error: Number of samples in X ({ndx}) and Absor ({nd}) mismatch.")
+            return None, None
+        if nlx != nc:
+             print(f"Error: Number of components ({nc}) does not match X ({nlx}).")
+             return None, None
+             
+        # Run CV (using inherited or overridden execute_cv logic, which calls self.run_cv)
+        # But wait, MulticalEngine.run calls self.run_cv directly.
+        # So I just call self.run_cv here.
+        
+        print("Running Cross Validation...")
+        
+        RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc = self.run_cv(
+            Selecao, x, absor, kmax, OptimModel, nc, cname, frac_test, 
+            output_dir=output_dir, outlier=outlier, use_ftest=use_ftest, colors=colors
+        )
+        
+        return RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc
         
     def run_cv(self, Selecao, x, absor, kmax, OptimModel, nc, cname, frac_test, output_dir=None, outlier=0, use_ftest=True, colors=None):
         """
@@ -47,6 +115,7 @@ class ExtendedMulticalEngine(MulticalEngine):
         RMSEtest_conc = np.zeros((kmax, nc))
         
         Ypred_cv = np.zeros((nd, nc, kmax))
+        self.Beta_store = np.zeros((nl, nc, kmax))
         
         # Select Model Class
         model_instance = None
@@ -120,6 +189,10 @@ class ExtendedMulticalEngine(MulticalEngine):
                 pw_inv = np.linalg.pinv(pw)
                 Beta_k = wk @ pw_inv @ qk.T
                 
+                # Store Raw Beta
+                if self.Beta_store is not None:
+                     self.Beta_store[:, :, k-1] = Beta_k * (Ysig_cal.reshape(1, -1) / Xsig_cal.reshape(-1, 1))
+
                 Y_cal_pred_norm = X_cal_in @ Beta_k
                 Y_cal_pred = Y_cal_pred_norm * Ysig_cal + Ymed_cal
                 
@@ -311,38 +384,40 @@ class ExtendedMulticalEngine(MulticalEngine):
                 c_curr = colors[j] if j < len(colors) else 'blue'
                 
                 # Use analyte color for RMSECV, black/gray for RMSEC to avoid clash
-                ax.plot(k_col, RMSECV[:, j], color=c_curr, linestyle='-', label='RMSECV (norm)')
-                ax.plot(k_col, RMSEcal[:, j], color=c_curr, linestyle='--', label='RMSEC (norm)')
+                ax.plot(k_col, RMSECV_conc[:, j], color=c_curr, linestyle='-', label='RMSECV (g/L)')
+                ax.plot(k_col, RMSEcal_conc[:, j], color=c_curr, linestyle='--', label='RMSEC (g/L)')
                 
                 # Determine which k to highlight
                 if use_ftest and j in best_k_ftest:
                     best_k = best_k_ftest[j]
                     best_k_idx = best_k - 1
-                    label_k = f'F-test Selected (k={best_k})'
+                    label_k = f'nº of LVs selected (F-test)(k={best_k})'
                     marker_k = 'k*'
                 else:
-                    best_k_idx = np.argmin(RMSECV[:, j])
+                    best_k_idx = np.argmin(RMSECV_conc[:, j])
                     best_k = best_k_idx + 1
                     label_k = f'Global Min (k={best_k})'
                     marker_k = 'k*' 
                 
-                min_r = RMSECV[best_k_idx, j]
+                min_r = RMSECV_conc[best_k_idx, j]
                 ax.plot(best_k, min_r, 'k*', markersize=15, label=label_k)
                 
                 ax.set_xlabel('Latent Variables (k)')
-                ax.set_ylabel(f'RMSE (Normalized) - {cname[j] if cname else ""}')
-                ax.set_title(f'RMSE Calibration/CV (Normalized) - {cname[j]}')
+                ax.set_ylabel(f'RMSE (g/L) - {cname[j] if cname else ""}')
+                ax.set_title(f'RMSE Calibration/CV (g/L) - {cname[j]}')
                 ax.legend()
                 ax.xaxis.set_major_locator(MaxNLocator(integer=True))
                 
                 # --- NEW INDIVIDUAL PLOT ---
                 fig_single, ax_single = plt.subplots(figsize=(6, 5))
-                ax_single.plot(k_col, RMSECV[:, j], color=c_curr, linestyle='-', label='RMSECV (norm)')
-                ax_single.plot(k_col, RMSEcal[:, j], color=c_curr, linestyle='--', label='RMSEC (norm)')
+                ax_single.plot(k_col, RMSECV_conc[:, j], color=c_curr, linestyle='-', label='RMSECV (g/L)')
+                ax_single.plot(k_col, RMSEcal_conc[:, j], color=c_curr, linestyle='--', label='RMSEC (g/L)')
                 ax_single.plot(best_k, min_r, 'k*', markersize=15, label=label_k)
                 
                 ax_single.set_xlabel('Latent Variables (k)')
-                ax_single.set_ylabel(f'RMSE (Normalized) - {cname[j] if cname else ""}')
+                ax_single.set_ylabel(f'RMSE (g/L) - {cname[j] if cname else ""}')
+                ax_single.set_title(f'RMSE Calibration/CV (g/L) - {cname[j]}')
+                ax_single.legend()
                 ax_single.set_title(f'RMSE Calibration/CV (Normalized) - {cname[j]}')
                 ax_single.legend()
                 ax_single.xaxis.set_major_locator(MaxNLocator(integer=True))
@@ -378,7 +453,7 @@ def main():
     Selecao = 1
     kmax = 15
     nc = 3
-    cname = ['cb', 'gl', 'xy']
+    cname = ['cb', 'Glucose', 'Xylose']
     colors = ['green', 'red', 'purple']
     unid = 'g/L'
     optkini = 2
@@ -458,6 +533,12 @@ def main():
         x0 = np.vstack(x_list)
         absor_data = np.vstack(absor_list)
         absor0 = np.vstack([wavelengths, absor_data])
+        
+        if time_list_spec:
+             times_all = np.concatenate(time_list_spec)
+        else:
+             times_all = None
+             
         print(f"Total samples loaded: {x0.shape[0]}")
     else:
         print("No valid data files loaded. Exiting.")
@@ -469,7 +550,7 @@ def main():
         Selecao, optkini, lini, kmax, nc, cname, unid, x0, absor0, 
         frac_test, dadosteste, OptimModel, pretreat, 
         analysis_list=analysis_list, output_dir=results_dir, outlier=outlier, use_ftest=use_ftest,
-        colors=colors
+        colors=colors, times=times_all
     )
     
     # --- PLOTTING ---
@@ -525,13 +606,12 @@ def main():
         r2 = corr[0, 1]**2
         rmse = RMSECV_conc[best_k_idx, j]
         
-        stats_text = f'$R^2$ = {r2:.3f}\nRMSE = {rmse:.3f} {unid}\nPCs = {best_k}'
+        stats_text = f'$R^2$ = {r2:.3f}\nRMSECV = {rmse:.3f} {unid}\nLVs = {best_k}'
         ax_ind.text(0.05, 0.95, stats_text, transform=ax_ind.transAxes, fontsize=12, verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
         
         ax_ind.set_xlabel(f'Measured {analyte_name} ({unid})', fontsize=12)
         ax_ind.set_ylabel(f'Predicted {analyte_name} ({unid})', fontsize=12)
         ax_ind.set_title(f'{analyte_name} Prediction', fontsize=14)
-        ax_ind.grid(True, linestyle=':', alpha=0.6)
         ax_ind.legend(loc='lower right')
         
         out_path_ind = os.path.join(results_dir, f'Publication_Plot_{analyte_name}.png')
@@ -591,13 +671,12 @@ def main():
         rmse = RMSECV_conc[best_k_idx, j]
 
         # Annotations
-        stats_text = f'$R^2$ = {r2:.3f}\nRMSE = {rmse:.3f} {unid}\nPCs = {best_k}'
+        stats_text = f'$R^2$ = {r2:.3f}\nRMSECV = {rmse:.3f} {unid}\nLVs = {best_k}'
         ax.text(0.05, 0.95, stats_text, transform=ax.transAxes, fontsize=12, verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
 
         ax.set_xlabel(f'Measured {analyte_name} ({unid})', fontsize=12)
         ax.set_ylabel(f'Predicted {analyte_name} ({unid})', fontsize=12)
         ax.set_title(f'{c_label} {analyte_name} Prediction', fontsize=14, loc='left')
-        ax.grid(True, linestyle=':', alpha=0.6)
         ax.set_xlim(mn, mx)
         ax.set_ylim(mn, mx)
         ax.legend(loc='lower right')
@@ -607,6 +686,160 @@ def main():
     fig.savefig(out_path, dpi=300, bbox_inches='tight')
     print(f"Saved combined plot to {out_path}")
     plt.close(fig)
+
+    # --- VERTICAL STACK: Predicted vs Measured (Glucose & Xylose) ---
+    print("Generating Vertical Predicted vs Measured Plot...")
+    fig_vert, axes_vert = plt.subplots(2, 1, figsize=(6, 10))
+    axes_vert = axes_vert.flatten()
+    
+    for i, j in enumerate(plot_indices): 
+        ax = axes_vert[i]
+        analyte_name = cname[j]
+        c_label = subplot_labels[i] # ['a)', 'b)']
+
+        # Determine best k
+        if use_ftest and j in engine.best_k_ftest_store:
+            best_k = engine.best_k_ftest_store[j]
+        else:
+            best_k = np.argmin(RMSECV_conc[:, j]) + 1
+        
+        best_k_idx = best_k - 1
+        
+        # Get predictions
+        y_pred_norm = Ypred_cv[:, j, best_k_idx]
+        y_pred_conc = y_pred_norm * xmax[j]
+        y_meas_conc = x_measured[:, j]
+        
+        # Scatter
+        mn_val = min(y_meas_conc.min(), y_pred_conc.min())
+        mx_val = max(y_meas_conc.max(), y_pred_conc.max())
+        mn = mn_val - 0.05 * (mx_val - mn_val)
+        mx = mx_val + 0.05 * (mx_val - mn_val)
+
+        # Plot points
+        ax.scatter(y_meas_conc, y_pred_conc, s=60, alpha=0.8, edgecolors='k', linewidth=0.8, c=colors[j], label='Measured vs Predicted')
+        
+        # Ideal Line
+        ax.plot([mn, mx], [mn, mx], 'k--', lw=2, label='1:1 Line')
+        
+        # Stats
+        corr = np.corrcoef(y_meas_conc, y_pred_conc)
+        r2 = corr[0, 1]**2
+        rmse = RMSECV_conc[best_k_idx, j]
+
+        # Annotations
+        stats_text = f'$R^2$ = {r2:.3f}\nRMSECV = {rmse:.3f} {unid}\nLVs = {best_k}'
+        ax.text(0.05, 0.95, stats_text, transform=ax.transAxes, fontsize=12, verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
+        ax.set_xlabel(f'Measured {analyte_name} ({unid})', fontsize=12)
+        ax.set_ylabel(f'Predicted {analyte_name} ({unid})', fontsize=12)
+        ax.set_title(f'{c_label} {analyte_name} Prediction', fontsize=14, loc='left')
+        ax.set_xlim(mn, mx)
+        ax.set_ylim(mn, mx)
+        ax.legend(loc='lower right')
+        
+    plt.tight_layout()
+    out_path_vert = os.path.join(results_dir, 'Publication_Plot_Combined_Vertical.png')
+    fig_vert.savefig(out_path_vert, dpi=300, bbox_inches='tight')
+    print(f"Saved vertical combined plot to {out_path_vert}")
+    plt.close(fig_vert)
+
+    # --- VERTICAL STACK: RMSE CV vs Components (g/L) ---
+    print("Generating Vertical RMSE CV Plot...")
+    fig_rmse, axes_rmse = plt.subplots(2, 1, figsize=(6, 10))
+    axes_rmse = axes_rmse.flatten()
+    k_range = np.arange(1, kmax + 1)
+    
+    for i, j in enumerate(plot_indices):
+        ax = axes_rmse[i]
+        analyte_name = cname[j]
+        c_label = subplot_labels[i]
+
+        # Determine best k (for marking on plot)
+        if use_ftest and j in engine.best_k_ftest_store:
+            best_k = engine.best_k_ftest_store[j]
+        else:
+            best_k = np.argmin(RMSECV_conc[:, j]) + 1
+        
+        rmse_cv_vals = RMSECV_conc[:, j]
+        rmse_cal_vals = RMSEcal_conc[:, j]
+
+        # Plot RMSE lines
+        ax.plot(k_range, rmse_cv_vals, color=colors[j], linestyle='-', label='RMSECV')
+        ax.plot(k_range, rmse_cal_vals, color=colors[j], linestyle='--', label='RMSEC')
+        
+        # Mark selected LV
+        rmse_at_best = rmse_cv_vals[best_k-1]
+        ax.plot(best_k, rmse_at_best, 'k*', markersize=15, label=f'Selected (LV={best_k})')
+        
+        ax.set_xlabel('Number of Latent Variables (LVs)', fontsize=12)
+        ax.set_ylabel(f'RMSE ({unid})', fontsize=12) # g/L
+        ax.set_title(f'{c_label} {analyte_name} RMSE', fontsize=14, loc='left')
+        ax.set_xticks(k_range)
+
+        ax.legend(loc='upper right')
+
+    plt.tight_layout()
+    out_path_rmse = os.path.join(results_dir, 'RMSE_CV_Combined_Vertical.png')
+    fig_rmse.savefig(out_path_rmse, dpi=300, bbox_inches='tight')
+    print(f"Saved vertical RMSE plot to {out_path_rmse}")
+    plt.close(fig_rmse)
+
+    # --- REGRESSION COEFFICIENTS PLOT ---
+    print("Generating Regression Coefficients Plot...")
+    wavelengths_plot = engine.wavelengths_store if engine.wavelengths_store is not None else wavelengths
+
+    if engine.Beta_store is not None and wavelengths_plot is not None:
+        fig_beta, axes_beta = plt.subplots(2, 1, figsize=(6, 10))
+        axes_beta = axes_beta.flatten()
+        
+        for i, j in enumerate(plot_indices):
+            ax = axes_beta[i]
+            analyte_name = cname[j]
+            c_label = subplot_labels[i]
+
+            # Determine best k
+            # Access logic duplicated from above for brevity
+            best_k = 0
+            if use_ftest and hasattr(engine, 'best_k_ftest_store') and engine.best_k_ftest_store:
+                 if isinstance(engine.best_k_ftest_store, dict) and j in engine.best_k_ftest_store:
+                     best_k = engine.best_k_ftest_store[j]
+                 elif isinstance(engine.best_k_ftest_store, list) and j < len(engine.best_k_ftest_store):
+                     best_k = engine.best_k_ftest_store[j]
+                 else:
+                     best_k = np.argmin(RMSECV_conc[:, j]) + 1
+            else:
+                best_k = np.argmin(RMSECV_conc[:, j]) + 1
+            
+            best_k_idx = int(best_k - 1)
+            
+            # Retrieve Beta
+            # Beta_store: (nl, nc, kmax) -> (wavelengths, analytes, LVs)
+            beta_vec = engine.Beta_store[:, j, best_k_idx]
+            
+            # Save Beta to file
+            beta_out = np.vstack([wavelengths_plot, beta_vec]).T
+            out_beta_txt = os.path.join(results_dir, f'Beta_Coeffs_{analyte_name}.txt')
+            np.savetxt(out_beta_txt, beta_out, header='Wavelength\tBeta', fmt='%g', delimiter='\t')
+            print(f"  Saved Beta coefficients to {out_beta_txt}")
+
+            # Plot
+            ax.plot(wavelengths_plot, beta_vec, color=colors[j], linewidth=1.5)
+            # Add zero line
+            ax.axhline(0, color='black', linestyle='--', linewidth=0.8)
+            
+            ax.set_xlabel('Wavelength (nm)', fontsize=12)
+            ax.set_ylabel('Regression Coefficient', fontsize=12)
+            ax.set_title(f'{c_label} {analyte_name} Regression Coeffs (LVs={best_k})', fontsize=14, loc='left')
+            
+            # Invert X axis for decreasing Wavenumber if needed, but usually kept standard for Wavelength
+            ax.set_xlim(min(wavelengths_plot), max(wavelengths_plot))
+
+        plt.tight_layout()
+        out_path_beta = os.path.join(results_dir, 'Regression_Coefficients_Combined_Vertical.png')
+        fig_beta.savefig(out_path_beta, dpi=300, bbox_inches='tight')
+        print(f"Saved regression coefficients plot to {out_path_beta}")
+        plt.close(fig_beta)
 
     print("All plots generated successfully.")
 

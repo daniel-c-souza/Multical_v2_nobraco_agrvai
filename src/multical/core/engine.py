@@ -15,7 +15,7 @@ class MulticalEngine:
     def __init__(self):
         pass
         
-    def run(self, Selecao, optkini, lini, kmax, nc, cname, unid, x0, absor0, frac_test, dadosteste, OptimModel, pretreat_list, analysis_list=None, output_dir=None, outlier=0, use_ftest=True, colors=None):
+    def run(self, Selecao, optkini, lini, kmax, nc, cname, unid, x0, absor0, frac_test, dadosteste, OptimModel, pretreat_list, analysis_list=None, output_dir=None, outlier=0, use_ftest=True, colors=None, times=None):
         """
         Main execution engine.
         """
@@ -36,7 +36,7 @@ class MulticalEngine:
         # Analysis
         if analysis_list:
              print("\n--- Running Data Analysis (Post-Pretreatment) ---")
-             func_analysis(analysis_list, absor, lambda_, x, block=False, output_dir=output_dir)
+             func_analysis(analysis_list, absor, lambda_, x, block=False, output_dir=output_dir, times=times)
              print("-----------------------------\n")
         
         # Test Data Handling (dadosteste)

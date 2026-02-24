@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os
 from src.multical.utils import zscore_matlab_style
 
-def func_analysis(analysis_list, absor, wavelengths, x=None, block=True, output_dir=None, prefix=""):
+def func_analysis(analysis_list, absor, wavelengths, x=None, block=True, output_dir=None, prefix="", times=None):
     """
     Python equivalent of func_analysis.sci
     
@@ -130,7 +130,19 @@ def func_analysis(analysis_list, absor, wavelengths, x=None, block=True, output_
             
             scores = absor @ eigvecs
             fig4, ax4 = plt.subplots()
-            ax4.scatter(scores[:, 0], scores[:, 1], marker='x')
+            
+            if times is not None:
+                times = np.array(times).flatten()
+                if len(times) != scores.shape[0]:
+                    print(f"Warning: Length of times ({len(times)}) does not match samples ({scores.shape[0]}). Using default color.")
+                    ax4.scatter(scores[:, 0], scores[:, 1], marker='x')
+                else:
+                    sc = ax4.scatter(scores[:, 0], scores[:, 1], c=times, cmap='viridis', marker='o', alpha=0.7)
+                    cbar = plt.colorbar(sc, ax=ax4)
+                    cbar.set_label('Time')
+            else:
+                ax4.scatter(scores[:, 0], scores[:, 1], marker='x')
+                
             ax4.set_xlabel('PC1')
             ax4.set_ylabel('PC2')
             ax4.set_title('Score Plot (PC1 vs PC2)')

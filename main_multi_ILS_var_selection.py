@@ -68,7 +68,7 @@ def main():
 
     # --- 6. Pretreatment Pipeline ---
     pretreat = [
-        ['Cut', 4500, 8000, 1],
+        ['Cut', 4400, 7500, 1],
         ['SG', 7, 1, 2, 1, 1],
     ]
 
@@ -132,6 +132,7 @@ def main():
     if x_list:
         x0 = np.vstack(x_list)
         absor_data = np.vstack(absor_list)
+        times_all = np.concatenate(time_list_spec)
         print(f"Total samples loaded: {x0.shape[0]}")
     else:
         raise FileNotFoundError("No valid data files loaded.")
@@ -283,7 +284,7 @@ def main():
     RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc = engine.run(
         Selecao, optkini, lini, kmax, nc, cname, unid, x0, absor0_final, 
         frac_test, dadosteste, OptimModel, pretreat_list=[], 
-        analysis_list=analysis_list, output_dir=results_dir, outlier=outlier, use_ftest=use_ftest, colors=colors
+        analysis_list=analysis_list, output_dir=results_dir, outlier=outlier, use_ftest=use_ftest, colors=colors, times=times_all
     )
     
     if RMSECV is not None:
