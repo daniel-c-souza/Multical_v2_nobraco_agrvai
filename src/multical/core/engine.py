@@ -74,12 +74,12 @@ class MulticalEngine:
         print("Running Cross Validation...")
 
         
-        RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc = self.run_cv(
+        RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc, R2CV, R2cal, best_k_ftest = self.run_cv(
             Selecao, x, absor, kmax, OptimModel, nc, cname, frac_test, 
             output_dir=output_dir, outlier=outlier, use_ftest=use_ftest, colors=colors
         )
         
-        return RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc
+        return RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc, R2CV, R2cal, best_k_ftest
 
 
     def run_cv(self, Selecao, x, absor, kmax, OptimModel, nc, cname, frac_test, output_dir=None, outlier=0, use_ftest=True, colors=None):
@@ -505,6 +505,24 @@ class MulticalEngine:
         fig_pred, axes_pred = plt.subplots(1, nc, figsize=(6*nc, 5), squeeze=False)
         axes_pred = axes_pred.flatten()
 
+        # --- Calculate R2 matrices EARLY for plotting ---
+        # Var(Y) for each component
+        # Using x (original units)
+        var_y = np.var(x, axis=0, ddof=0)
+        # Avoid division by zero
+        var_y[var_y == 0] = 1.0 
+        
+        R2CV = np.zeros((kmax, nc))
+        R2cal = np.zeros((kmax, nc))
+        
+        for k_idx in range(kmax):
+            # MSE = RMSE^2 (CV) and (Cal) defined earlier
+            mse_cv = RMSECV_conc[k_idx, :] ** 2
+            mse_cal = RMSEcal_conc[k_idx, :] ** 2
+            
+            R2CV[k_idx, :] = 1 - (mse_cv / var_y)
+            R2cal[k_idx, :] = 1 - (mse_cal / var_y)
+
         for j in range(nc):
             # Decide best K for prediction plot
             if use_ftest and j in best_k_ftest:
@@ -567,13 +585,19 @@ class MulticalEngine:
                  ax.plot([min_val, max_val], [min_val, max_val], 'k--', label='Ideal')
                  
                  # Stats
+                 # Calculate Pearson R2
                  correlation_matrix = np.corrcoef(x_plot, y_plot)
-                 r2 = correlation_matrix[0, 1]**2 if correlation_matrix.shape[0] > 1 else 0
+                 r2_pearson = correlation_matrix[0, 1]**2 if correlation_matrix.shape[0] > 1 else 0
+                 
+                 # Use Q2 (R2CV) from matrix
+                 r2_cv_val = R2CV[best_k_idx_sel, j]
+                 
                  rmsecv_best = RMSECV_conc[best_k_idx_sel, j]
                  
                  ax.set_xlabel(f'Measured {cname[j]}')
                  ax.set_ylabel(f'Predicted {cname[j]}')
-                 ax.set_title(f'{cname[j]}: k={best_k_selected}, $R^2$={r2:.3f}, RMSE={rmsecv_best:.4g}')
+                 # Update title to include both or clearly label CV R2
+                 ax.set_title(f'{cname[j]}: k={best_k_selected}\n$R^2_{{CV}}$={r2_cv_val:.3f}, $r^2$={r2_pearson:.3f}, RMSE={rmsecv_best:.4g}')
                  ax.legend()
         
         if output_dir:
@@ -582,5 +606,5 @@ class MulticalEngine:
         
         plt.tight_layout()
         plt.show(block=False)
-            
-        return RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc
+
+        return RMSECV, RMSECV_conc, RMSEcal, RMSEcal_conc, RMSEtest, RMSEtest_conc, R2CV, R2cal, best_k_ftest

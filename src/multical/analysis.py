@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
 import os
 from src.multical.utils import zscore_matlab_style
 
@@ -52,7 +53,7 @@ def func_analysis(analysis_list, absor, wavelengths, x=None, block=True, output_
             nd, nl = absor.shape
             if wavelengths is not None and len(wavelengths) == nl:
                 c_vals = np.tile(wavelengths, nd)
-                c_label = 'Wavelength (nm)'
+                c_label = 'Wavenumber ($cm^{-1}$)'
             else:
                 c_vals = np.tile(np.arange(nl), nd)
                 c_label = 'Wavelength Index'
@@ -112,7 +113,7 @@ def func_analysis(analysis_list, absor, wavelengths, x=None, block=True, output_
             fig3, ax3 = plt.subplots()
             if wavelengths is not None and len(wavelengths) == eigvecs.shape[0]:
                 x_axis = wavelengths
-                xlabel_text = 'Wavelength (nm)'
+                xlabel_text = 'Wavenumber ($cm^{-1}$)'
             else:
                 x_axis = np.arange(eigvecs.shape[0])
                 xlabel_text = 'Index'
@@ -128,9 +129,57 @@ def func_analysis(analysis_list, absor, wavelengths, x=None, block=True, output_
 
             # Plot 2: Scores (Projection)
             
-            scores = absor @ eigvecs
+            # Scores using consistent scaling (z-scored data)
+            scores = anorm @ eigvecs
             fig4, ax4 = plt.subplots()
-            ax4.scatter(scores[:, 0], scores[:, 1], marker='x')
+            
+            # --- Hotelling's T2 Outlier Detection ---
+            N = anorm.shape[0]
+            # Eigenvalues correspond to (N-1)*Variance because cov_mat = anorm.T @ anorm
+            vars_pc = eigvals[:2] / (N - 1)
+            
+            # Calculate T^2 based on first 2 PCs
+            # T^2_i = (t_i1^2 / lambda_1) + (t_i2^2 / lambda_2)
+            t2_values = (scores[:, 0]**2 / vars_pc[0]) + (scores[:, 1]**2 / vars_pc[1])
+            
+            # Threshold: Chi-square inverse cumulative distribution (95%, 2 DOF)
+            t2_limit = 5.991
+            
+            normal_mask = t2_values <= t2_limit
+            outlier_mask = t2_values > t2_limit
+            
+            # Create Time Gradient (Indices)
+            sample_indices = np.arange(N)
+            
+            # Plot Normal Samples (Squares with Time Gradient)
+            sc_norm = ax4.scatter(scores[normal_mask, 0], scores[normal_mask, 1], 
+                        c=sample_indices[normal_mask], cmap='viridis', 
+                        marker='s', label='Normal (Inside 95%)', alpha=0.9,
+                        vmin=0, vmax=N-1)
+            
+            # Plot Outliers (X with Time Gradient)
+            ax4.scatter(scores[outlier_mask, 0], scores[outlier_mask, 1], 
+                        c=sample_indices[outlier_mask], cmap='viridis', 
+                        marker='x', label='Outliers (Outside 95%)', s=60,
+                        vmin=0, vmax=N-1)
+            
+            # Add Colorbar (Linked to the normal points scatter, but scale is shared)
+            cbar = plt.colorbar(sc_norm, ax=ax4)
+            cbar.set_label('Sample Index (Time)')
+            
+            # Draw Confidence Ellipse
+            # Since scores are from PCA, they are uncorrelated -> Ellipse is axis-aligned at (0,0)
+            # Semi-axes = sqrt(lambda) * sqrt(critical_value)
+            scale_factor = np.sqrt(t2_limit)
+            width = 2 * scale_factor * np.sqrt(vars_pc[0])
+            height = 2 * scale_factor * np.sqrt(vars_pc[1])
+            
+            ellipse = Ellipse(xy=(0, 0), width=width, height=height, angle=0,
+                              edgecolor='red', linestyle='--', facecolor='none', linewidth=1.5, label='95% Confidence')
+            ax4.add_patch(ellipse)
+            ax4.legend()
+            # ----------------------------------------
+            
             ax4.set_xlabel('PC1')
             ax4.set_ylabel('PC2')
             ax4.set_title('Score Plot (PC1 vs PC2)')

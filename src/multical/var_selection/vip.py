@@ -40,7 +40,7 @@ def calculate_vip(model, X, Y, k, wavelengths=None, output_dir=None):
         fig, ax = plt.subplots(figsize=(10, 5))
         if wavelengths is not None:
             ax.plot(wavelengths, vip_scores)
-            ax.set_xlabel("Wavelength")
+            ax.set_xlabel(r"Wavenumber ($cm^{-1}$)")
             # Mark VIP=1 threshold
             ax.axhline(y=1.0, color='r', linestyle='--', label='VIP > 1')
         else:

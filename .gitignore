@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.vscode/
+
+# Project Outputs
+results/
+results_*/
+calibracao_*/
+calibrações_*/
+models/
+
+# Generated Data & Plots
+*.png
+*_nm.csv
+minimos.txt
+Erro_*.txt
+Pred_*.txt
+VIP_Optimization_Log.txt
+
+# Session & Debug
+multical_session.json
+header_check.txt

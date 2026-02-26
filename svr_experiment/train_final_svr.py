@@ -89,11 +89,12 @@ def main():
     nc = len(cname)
     
     # Files
+    data_dir = os.path.join(project_root, 'data')
     data_files = [ 
-        ('exp4_refe.txt', 'exp4_nonda.txt'),
-        ('exp5_refe.txt', 'exp5_nonda.txt'),
-        ('exp6_refe.txt', 'exp6_nonda.txt'),
-        ('exp7_refe.txt', 'exp7_nonda.txt'),
+        (os.path.join(data_dir, 'exp4_refe.txt'), os.path.join(data_dir, 'exp4_nonda.txt')),
+        (os.path.join(data_dir, 'exp5_refe.txt'), os.path.join(data_dir, 'exp5_nonda.txt')),
+        (os.path.join(data_dir, 'exp6_refe.txt'), os.path.join(data_dir, 'exp6_nonda.txt')),
+        (os.path.join(data_dir, 'exp7_refe.txt'), os.path.join(data_dir, 'exp7_nonda.txt')),
     ]
     
     pretreat = [

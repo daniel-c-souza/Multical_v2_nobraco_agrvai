@@ -235,10 +235,12 @@ class MulticalGUI:
 
     def add_data_pair(self):
         # Simple implementation: Ask for Conc file, then Abs file
-        conc_file = filedialog.askopenfilename(title="Select Concentration File", filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
+        initial_dir = os.path.join(os.getcwd(), 'data')
+        
+        conc_file = filedialog.askopenfilename(title="Select Concentration File", initialdir=initial_dir, filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
         if not conc_file: return
         
-        abs_file = filedialog.askopenfilename(title="Select Absorbance File for " + os.path.basename(conc_file), filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
+        abs_file = filedialog.askopenfilename(title="Select Absorbance File for " + os.path.basename(conc_file), initialdir=initial_dir, filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
         if not abs_file: return
         
         self.file_pairs.append((conc_file, abs_file))

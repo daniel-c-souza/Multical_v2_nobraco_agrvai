@@ -120,17 +120,17 @@ def run_inference(Selecao, optkini, lini, kinf, nc, cname, unid, x0, absor0, xin
              best_idx = counts.most_common(1)[0][0]
              cini = best_idx
              lini_val = lambda_[cini]
-             print(f"Optimal SPA start wavelength: {lini_val} nm (Index {cini})")
+             print(f"Optimal SPA start wavenumber: {lini_val} cm-1 (Index {cini})")
              
         elif optkini == 1:
              # lini given
              # find index clini closest to lini
              idx = (np.abs(lambda_ - lini)).argmin()
              cini = idx
-             print(f"Using provided SPA start: {lambda_[cini]} nm (Index {cini})")
+             print(f"Using provided SPA start: {lambda_[cini]} cm-1 (Index {cini})")
         else:
              cini = 0
-             print(f"Using first wavelength as SPA start: {lambda_[cini]}")
+             print(f"Using first wavenumber as SPA start: {lambda_[cini]}")
              
     # 6. Inference Loop
     Xinf_pred = np.zeros((ndinf, nc))
@@ -249,6 +249,11 @@ def run_inference(Selecao, optkini, lini, kinf, nc, cname, unid, x0, absor0, xin
                 # Simple metrics
                 rmsep = np.sqrt(np.mean((y_ref_valid - y_pred_valid)**2))
                 
+                # R-squared Calculation
+                ss_res = np.sum((y_ref_valid - y_pred_valid) ** 2)
+                ss_tot = np.sum((y_ref_valid - np.mean(y_ref_valid)) ** 2)
+                r2 = 1 - (ss_res / ss_tot)
+                
                 c_curr = colors[j] if j < len(colors) else 'blue'
                 plt.plot(y_ref, y_pred, 'o', label='Samples', color=c_curr)
                 
@@ -258,16 +263,17 @@ def run_inference(Selecao, optkini, lini, kinf, nc, cname, unid, x0, absor0, xin
                 
                 # Expand limits slightly for better visualization
                 range_val = max_val - min_val
-                if range_val == 0: range_val = 1
-                min_val -= range_val * 0.05
-                max_val += range_val * 0.05
+                if (range_val == 0): range_val = 1
+                min_plt = min_val - range_val * 0.05
+                max_plt = max_val + range_val * 0.05
                 
-                plt.plot([min_val, max_val], [min_val, max_val], 'k--', label='1:1 Line')
+                plt.plot([min_plt, max_plt], [min_plt, max_plt], 'k--', label='1:1 Line')
             else:
                  rmsep = 0.0
+                 r2 = 0.0
                  plt.plot([], [], 'o', label='No Valid Ref Samples')
             
-            plt.title(f"Prediction: {cname[j]} (RMSEP={rmsep:.4f}, LVs={kinf[j]})")
+            plt.title(f"Prediction: {cname[j]} (RMSEP={rmsep:.4f}, $R^2$={r2:.4f}, LVs={kinf[j]})")
             plt.xlabel(f"Reference ({unid})")
             plt.ylabel(f"Predicted ({unid})")
             plt.legend()
