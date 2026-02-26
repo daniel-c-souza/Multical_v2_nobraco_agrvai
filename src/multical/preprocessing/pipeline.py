@@ -5,6 +5,7 @@ from .smoothing import alisar
 from .derivatives import diffmeu
 from .savitzky_golay import sgolay_filt
 from .loess import loess
+from .scatter_correction import snv, emsc
 from ..utils import zscore_matlab_style
 
 
@@ -100,6 +101,20 @@ def apply_pretreatment(pretreat_list, absor, lambda_, plot=True, output_dir=None
                 absor = dA
             elif order == 2:
                 absor = d2A
+
+        elif method == 'SNV':
+            # {'SNV', plot}
+            absor = snv(absor)
+
+        elif method == 'EMSC':
+            # {'EMSC', degree, plot}
+            degree = int(step[1])
+            absor = emsc(absor, lambda_, degree=degree)
+
+        elif method == 'MSC':
+             # {'MSC', plot} -> Equivalent to EMSC degree 0 (just offset/b) or 1?
+             # Standard MSC is x = a + b*xref. That is degree 0 in my implementation (1, ref).
+             absor = emsc(absor, lambda_, degree=0)
 
         elif method == 'BLCtr':
             # {'BLCtr', ini_lamb, final_lamb, Abs_value, plot}

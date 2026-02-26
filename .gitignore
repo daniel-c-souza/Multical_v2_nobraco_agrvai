@@ -22,3 +22,5 @@ VIP_Optimization_Log.txt
 # Session & Debug
 multical_session.json
 header_check.txt
+*.png
+*.png
