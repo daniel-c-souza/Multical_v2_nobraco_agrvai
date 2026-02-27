@@ -18,7 +18,7 @@ RESULTS_DIR = "results_var_selection"
 
 DATA_FILES = [
     ('data/exp4_refe.txt', 'data/exp4_nonda.txt'),
-    #('data/exp5_refe.txt', 'data/exp5_nonda.txt'),
+    ('data/exp5_refe.txt', 'data/exp5_nonda.txt'),
     ('data/exp6_refe.txt', 'data/exp6_nonda.txt'),
     ('data/exp7_refe.txt', 'data/exp7_nonda.txt'),  
 ]
@@ -59,7 +59,7 @@ PSO_PARAMS = {
 # Applied BEFORE selection logic
 PRETREATMENT = [
     ['Cut', 4400, 7500, 1],
-    ['SG', 7, 1, 2, 1, 1],
+    ['SG', 7, 2, 1, 1],
 ]
 
 # =============================================================================
@@ -200,6 +200,16 @@ def main():
 
     if RMSECV is not None:
         print("\nFinal Model Generated.")
+
+    # --- SAVE SELECTION MODEL ---
+    from src.multical.core.saving import train_and_save_model_pls
+    
+    print("\n--- Saving Variable Selection Model ---")
+    MODEL_FILENAME = "model_var_selection.pkl"
+    # Note: absor_final is already pretreated and reduced.
+    # engine.run returns best_k_dict which is list of k
+    train_and_save_model_pls(absor_final, x0, wl_final, best_k_dict, os.path.join(RESULTS_DIR, MODEL_FILENAME), rmsecv_list=RMSECV_conc)
+
 
 if __name__ == "__main__":
     main()

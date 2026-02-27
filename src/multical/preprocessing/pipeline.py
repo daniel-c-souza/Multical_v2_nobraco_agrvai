@@ -58,14 +58,14 @@ def apply_pretreatment(pretreat_list, absor, lambda_, plot=True, output_dir=None
             absor = absor - current_mean
             
         elif method == 'SG':
-            # {'SG', radius, alis_type, poly_order, der_order, plot}
+            # {'SG', radius, poly_order, der_order, plot}
             radius = step[1]
-            alis_type = step[2] 
-            poly_order = step[3]
-            der_order = step[4]
+            poly_order = step[2]
+            der_order = step[3]
             
             nd, nl = absor.shape
             absortemp = np.zeros((nd, nl))
+
             
             # Run sgolay_filt on each spectrum
             for idx in range(nd):

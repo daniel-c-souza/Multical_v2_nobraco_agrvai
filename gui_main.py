@@ -203,7 +203,7 @@ class MulticalGUI:
         self.txt_pretreat = scrolledtext.ScrolledText(config_frame, height=8, width=40)
         self.txt_pretreat.grid(row=12, column=0, columnspan=2, sticky="ew")
         
-        default_pretreat = "[\n  ['Cut', 5500, 8500, 1],\n  ['SG', 7, 1, 2, 1, 1]\n]"
+        default_pretreat = "[\n  ['Cut', 5500, 8500, 1],\n  ['SG', 7, 2, 1, 1]\n]"
         self.txt_pretreat.insert(tk.END, default_pretreat)
         
         # Directory

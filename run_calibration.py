@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 from src.multical.core.engine import MulticalEngine
 from src.multical.preprocessing.pipeline import apply_pretreatment
-
+from src.multical.core.saving import train_and_save_model_pls
 # =============================================================================
 #                                 CONFIGURATION
 # =============================================================================
@@ -18,7 +18,7 @@ DATA_FILES = [
     ('data/exp4_refe.txt', 'data/exp4_nonda.txt'),
     ('data/exp5_refe.txt', 'data/exp5_nonda.txt'),
     ('data/exp6_refe.txt', 'data/exp6_nonda.txt'),
-    #('data/exp7_refe.txt', 'data/exp7_nonda.txt'),
+    ('data/exp7_refe.txt', 'data/exp7_nonda.txt'),
 ]
 
 # --- 3. Model Parameters ---
@@ -55,7 +55,7 @@ VAL_FRACTION = 0.20       # Fraction for validation holdout
 # [Operation, Param1, Param2, ...]
 PRETREATMENT = [
     ['Cut', 4400, 7500, 1], # Cut spectral region (Min, Max, Plot?)
-    ['SG', 7, 1, 2, 1, 1],  # Savitzky-Golay: Window=7, Poly=1, Deriv=2
+    ['SG', 7, 2, 1, 1],  # Savitzky-Golay: Window=7, Poly=2, Deriv=1
 
 ]
 
@@ -190,12 +190,32 @@ def main():
             print(row_str)
         print(div_line)
 
+
     if RMSECV is not None:
         print(f"\n{'='*60}")
         print(f"FINAL RESULTS REPORT".center(60))
         print(f"{'='*60}")
         print_metric_table(f"RMSECV ({UNITS})", RMSECV_conc, ANALYTES)
         print_metric_table("R-Squared (CV)", R2CV, ANALYTES)
+
+    # --- SAVE TRAINED MODEL ---
+    print("\n--- Saving Fully Trained Model ---")
+  
+    
+    # 1. Re-apply Pretreatment to get final spectral matrix
+    # Note: engine.run does this internally but doesn't return the pretreated matrix.
+    # We must do it here to ensure the saved model uses pretreated data.
+    absor_pre_final, wl_final = apply_pretreatment(PRETREATMENT, absor_raw.copy(), wavelengths.copy(), plot=False)
+    
+    # 2. Get Optimal Latent Variables (k)
+    # best_k_dict is returned by engine.run. It is a list [k_analyte1, k_analyte2...]
+    # If the user wants to override, they can modify this list or the code below.
+    best_k_list = best_k_dict 
+    print(f"Optimal LVs detected: {best_k_list}")
+
+    MODEL_FILENAME = "model_calibration.pkl"
+    train_and_save_model_pls(absor_pre_final, x0, wl_final, best_k_list, os.path.join(RESULTS_DIR, MODEL_FILENAME), rmsecv_list=RMSECV_conc)
+
 
 if __name__ == "__main__":
     main()
